@@ -70,6 +70,13 @@ def _norm(row: dict, fields: list) -> dict:
     return out
 
 
+def _truthy(v) -> bool:
+    """Parse a CSV boolean that may be "True"/"False"/"1"/"0"/"" correctly."""
+    if isinstance(v, bool):
+        return v
+    return str(v or "").strip().lower() in ("true", "1", "yes", "y")
+
+
 def _decode(row: dict) -> dict:
     d = dict(row)
     if not d.get("status"):
@@ -225,12 +232,12 @@ def query_issues(category: Optional[str] = None, status: Optional[str] = None,
                  dept: Optional[str] = None, min_severity: Optional[int] = None,
                  search: Optional[str] = None, min_affected: Optional[int] = None,
                  sla_breached: Optional[bool] = None, sort: str = "priority",
-                 limit: Optional[int] = None) -> list:
+                 limit: Optional[int] = None, area: Optional[str] = None) -> list:
     """Flexible CSV query over issues: filter + search + sort + limit.
 
     Supports: category, status, dept, min_severity, text search (summary/category),
     min affected_count, SLA breach flag, sort (priority/days/affected/created),
-    and an optional row limit.
+    area (first part of the location), and an optional row limit.
     """
     import datetime as _dt
     rows = _read("issues")
@@ -250,6 +257,20 @@ def query_issues(category: Optional[str] = None, status: Optional[str] = None,
             continue
         if dept and (r.get("dept") or "").lower() != dept.lower():
             continue
+        if area:
+            # Resolve the issue's area from its member complaints' location_text
+            # (falls back to the summary text).
+            iid = int(r.get("id") or 0)
+            member_locs = []
+            for m in _read("memberships"):
+                if int(m.get("issue_id") or 0) == iid:
+                    cid = m.get("complaint_id")
+                    for c in _read("complaints"):
+                        if cid and c.get("id") == cid and (c.get("location_text") or ""):
+                            member_locs.append(c["location_text"])
+            hay = " ".join(member_locs) + " " + (r.get("summary") or "")
+            if area.lower() not in hay.lower():
+                continue
         if min_severity is not None and int(r.get("severity") or 0) < min_severity:
             continue
         if min_affected is not None and int(r.get("affected_count") or 0) < min_affected:
@@ -333,6 +354,33 @@ def distinct_categories() -> list:
     return items
 
 
+def distinct_areas() -> list:
+    """All distinct areas seen across complaints/issues (area = first part of the
+    resolved location_text). Powers the area filter dropdown."""
+    def _area(r):
+        loc = (r.get("location_text") or "").strip()
+        if loc:
+            return loc.split(",")[0].strip() or "Unspecified"
+        if r.get("loc_source") in ("gps", "photo_exif"):
+            return "GPS / EXIF located"
+        return "Unspecified"
+
+    areas = {}
+    for r in _read("complaints"):
+        a = _area(r)
+        if a not in areas:
+            areas[a] = {"key": a, "count": 0}
+        areas[a]["count"] += 1
+    for r in _read("issues"):
+        loc = (r.get("summary") or "")
+        a = _area(r)
+        if a not in areas:
+            areas[a] = {"key": a, "count": 0}
+    items = list(areas.values())
+    items.sort(key=lambda x: (-x["count"], x["key"]))
+    return items
+
+
 def generate_report() -> dict:
     """Extensive civic report from the complaints CSV, segregated by area."""
     import datetime as _dt
@@ -402,7 +450,7 @@ def generate_report() -> dict:
             "id": r.get("id"), "category": cat, "category_label": r.get("category_label") or cat,
             "severity": sev, "status": st, "summary": (r.get("summary") or "")[:140],
             "location_text": r.get("location_text") or "", "days_open": round(_days(r), 1),
-            "created_at": r.get("created_at") or "", "is_spam": bool(r.get("is_spam")) or cat == "spam",
+            "created_at": r.get("created_at") or "", "is_spam": _truthy(r.get("is_spam")) or cat == "spam",
         })
 
         # tags from the AI (CSV stores them JSON-encoded)
@@ -414,7 +462,7 @@ def generate_report() -> dict:
         for t in tl:
             tag_cloud[str(t)] = tag_cloud.get(str(t), 0) + 1
 
-        if bool(r.get("is_spam")) or cat == "spam":
+        if _truthy(r.get("is_spam")) or cat == "spam":
             spam += 1
         if r.get("urgent_hint"):
             urgent += 1

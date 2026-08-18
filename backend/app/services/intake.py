@@ -22,7 +22,6 @@ EXTRACT_SYSTEM = (
     "When a complaint is vague or ambiguous (cannot be classified into any concrete issue) use "
     "category 'other'. "
     "Also give: category_label (human-friendly title, e.g. 'Open Manhole'), "
-    "category_color (a vivid hex color you pick for the new category, only when creating one), "
     "tags (2-4 short snake_case keywords describing the issue, e.g. ['asphalt','crater','two_wheeler']), "
     "severity 1-5, "
     "location_text (a short place name / landmark / street in Chennai), "
@@ -38,7 +37,7 @@ VISION_SYSTEM = (
     "is_spam — true ONLY if the photo is clearly not a civic issue (advertisement, personal photo, "
     "selfie, food, random object, unrelated scene). Otherwise false. "
     "When the photo is ambiguous/unclear use category 'other'. "
-    "Also give category_label (human-friendly title), category_color (vivid hex you pick when creating one), "
+    "Also give category_label (human-friendly title), "
     "tags (2-4 short snake_case keywords, e.g. ['pothole','water','asphalt']), "
     "severity 1-5 based on size/extent/danger, "
     "extent (one short phrase like 'large pothole covering most of lane'), "
@@ -66,6 +65,39 @@ _DEFAULT_CAT_COLORS = {
     "other": "#7A877A",
     "spam": "#8B0000",
 }
+
+# Curated palette for dynamic (AI-created) categories — the app picks the color
+# deterministically here (NOT the LLM) so colours are stable and never collide.
+_DYNAMIC_PALETTE = [
+    "#FF5A1F", "#9C27B0", "#00BCD4", "#E91E63", "#8BC34A",
+    "#FF9800", "#3F51B5", "#00E676", "#FF4081", "#26A69A",
+    "#7E57C2", "#FFB300", "#00ACC1", "#D81B60", "#689F38",
+    "#FF7043", "#5C6BC0", "#00897B", "#FB8C00", "#8E24AA",
+]
+
+
+def _assign_category_color(category: str) -> str:
+    """Deterministic, non-duplicate color for a dynamic category.
+    Uses a fixed palette keyed by a hash of the category key, skipping any color
+    already in use by existing categories."""
+    import hashlib
+    from app.models import store
+    base = _DEFAULT_CAT_COLORS.get(category)
+    if base:
+        return base
+    # colors already taken by existing categories (standard + dynamic + spam)
+    used = set()
+    for c in store.distinct_categories():
+        col = (c.get("color") or "").strip().upper()
+        if col:
+            used.add(col)
+    used.discard(_DEFAULT_CAT_COLORS.get(category, "").upper())
+    h = int(hashlib.sha256(category.encode()).hexdigest(), 16)
+    for i in range(len(_DYNAMIC_PALETTE)):
+        col = _DYNAMIC_PALETTE[(h + i) % len(_DYNAMIC_PALETTE)]
+        if col not in used:
+            return col
+    return _DYNAMIC_PALETTE[h % len(_DYNAMIC_PALETTE)]
 
 # Indic scripts: Tamil (0B80-0BFF), Devanagari (0900-097F), Bengali, Telugu, etc.
 _INDIC_RE = re.compile(r"[\u0900-\u0DFF\u0B00-\u0B7F]")
@@ -276,25 +308,17 @@ async def process_submission(text: str = "", image_b64: str = "", audio_b64: str
             dedup_tags.append(t)
     tags = dedup_tags[:5]
 
-    # ---- dynamic categories: label + color (AI-picked for new issue types) ----
+    # ---- dynamic categories: label from AI, color assigned deterministically ----
     category_label = ""
-    category_color = ""
     if extracted and extracted.category_label:
         category_label = extracted.category_label
     elif vision and vision.category_label:
         category_label = vision.category_label
-    if extracted and extracted.category_color:
-        category_color = extracted.category_color
-    elif vision and vision.category_color:
-        category_color = vision.category_color
     if category == "spam":
         category_label = "Spam / Unrelated"
-        category_color = "#8B0000"
-    # fallback label/color for standard categories
     if not category_label:
         category_label = _DEFAULT_CAT_LABELS.get(category, category.replace("_", " ").title())
-    if not category_color:
-        category_color = _DEFAULT_CAT_COLORS.get(category, "#7A877A")
+    category_color = _assign_category_color(category)
 
     summary = ""
     if extracted:

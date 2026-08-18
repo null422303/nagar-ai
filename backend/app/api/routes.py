@@ -92,9 +92,9 @@ def _enrich_issue(d: dict) -> dict:
 
 @router.get("/issues")
 async def list_issues(category: Optional[str] = None, status: Optional[str] = None,
-                      sort: str = "priority"):
+                      sort: str = "priority", area: Optional[str] = None):
     out = []
-    for r in store.query_issues(category=category, status=status, sort=sort):
+    for r in store.query_issues(category=category, status=status, sort=sort, area=area):
         d = _enrich_issue(dict(r))
         d["members"] = store.get_memberships(int(r["id"]))
         out.append(d)
@@ -191,13 +191,14 @@ async def search_issues(
     sla_breached: Optional[bool] = None,
     sort: str = "priority",
     limit: Optional[int] = None,
+    area: Optional[str] = None,
 ):
     """Rich query over issues: filters + text search + sort + limit."""
     out = []
     for r in store.query_issues(
         category=category, status=status, dept=dept,
         min_severity=min_severity, search=q, min_affected=min_affected,
-        sla_breached=sla_breached, sort=sort, limit=limit,
+        sla_breached=sla_breached, sort=sort, limit=limit, area=area,
     ):
         d = _enrich_issue(dict(r))
         d["members"] = store.get_memberships(int(r["id"]))
@@ -222,6 +223,13 @@ async def get_categories():
     """All distinct categories (standard + AI-created + spam) with label/color/count.
     Powers the dynamic filter dropdown."""
     return store.distinct_categories()
+
+
+@router.get("/areas")
+async def get_areas():
+    """All distinct areas seen across complaints (area = first part of the resolved
+    location_text). Powers the area filter dropdown; auto-updates as new areas appear."""
+    return store.distinct_areas()
 
 
 @router.get("/report")

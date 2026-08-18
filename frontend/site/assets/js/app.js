@@ -40,7 +40,7 @@
   /* ---------- state ---------- */
   var DEMO = false;
   var issues = [];
-  var catF = "", statF = "", sortF = "priority";
+  var catF = "", statF = "", sortF = "priority", areaF = "";
   var map = null, markerLayer = null, activeHighlight = null, mapInited = false, mapSizedOnce = false;
   var adminAuthed = false;
   var currentTab = "text";
@@ -258,6 +258,7 @@
       var qs = new URLSearchParams();
       qs.set("q", q);
       if (catF) { var c = catF === "streetlight" ? "broken_streetlight" : catF; qs.set("category", c); }
+      if (areaF) qs.set("area", areaF);
       if (statF) qs.set("status", statF);
       if (sortF) qs.set("sort", sortF);
       return j("GET", "/search?" + qs);
@@ -268,6 +269,7 @@
       var c = catF === "streetlight" ? "broken_streetlight" : catF;
       qs.set("category", c);
     }
+    if (areaF) qs.set("area", areaF);
     if (statF) { qs.set("status", statF === "progress" ? "in_progress" : statF); }
     if (sortF) qs.set("sort", sortF);
     return j("GET", "/issues?" + qs);
@@ -280,6 +282,10 @@
           var c = catF === "streetlight" ? "broken_streetlight" : catF;
           if (i.category !== c) return false;
         }
+        if (areaF) {
+          var hay = (i.location_text || "") + " " + (i.summary || "");
+          if (hay.toLowerCase().indexOf(areaF.toLowerCase()) === -1) return false;
+        }
         if (statF && i.status !== statF) return false;
         return true;
       });
@@ -289,6 +295,7 @@
       issues = data || [];
       refresh();
       loadCategories();
+      loadAreas();
     }).catch(function () {
       setDemo(true);
       issues = demoLoadStore();
@@ -331,6 +338,37 @@
         legend.innerHTML = items;
       }
     }).catch(function () { /* keep static options on failure */ });
+  }
+
+  /* Area dropdown: populate from /api/areas so new areas appear automatically. */
+  function loadAreas() {
+    var sel = $("fArea");
+    if (DEMO) {
+      // offline demo: build from demo store locations
+      if (sel) {
+        var areas = {};
+        demoLoadStore().forEach(function (i) {
+          var a = (i.location_text || "").split(",")[0].trim();
+          if (a) areas[a] = 1;
+        });
+        var kept = ['<option value="">All areas</option>'];
+        Object.keys(areas).forEach(function (a) {
+          kept.push('<option value="' + esc(a) + '">' + esc(a) + "</option>");
+        });
+        sel.innerHTML = kept.join("");
+      }
+      return;
+    }
+    if (!sel) return;
+    var current = sel.value;
+    j("GET", "/areas").then(function (areas) {
+      if (!areas || !areas.length) return;
+      var kept = ['<option value="">All areas</option>'];
+      areas.forEach(function (a) {
+        kept.push('<option value="' + esc(a.key) + '"' + (current === a.key ? " selected" : "") + ">" + esc(a.key) + " (" + a.count + ")</option>");
+      });
+      sel.innerHTML = kept.join("");
+    }).catch(function () { /* keep static on failure */ });
   }
 
   function clusterMetrics(issue) {
@@ -1075,9 +1113,10 @@
     });
   }
 
-  ["fCategory", "fStatus", "fSort"].forEach(function (id) {
+  ["fCategory", "fStatus", "fSort", "fArea"].forEach(function (id) {
     $(id).addEventListener("change", function () {
       if (id === "fSort") { sortF = $(id).value; loadIssues(); }
+      else if (id === "fArea") { areaF = $("fArea").value; loadIssues(); }
       else { catF = $("fCategory").value; statF = $("fStatus").value; loadIssues(); }
     });
   });
@@ -1155,4 +1194,5 @@
   setInterval(tickClock, 1000);
   loadIssues();
   loadCategories();
+  loadAreas();
 })();
