@@ -15,6 +15,7 @@ _VPN_BLOCK_PAGE = """<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>404 · NAGAR AI — Not Allowed</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2 L22 20 H2 Z' fill='%23E8503A' stroke='%2312100c' stroke-width='1.5'/%3E%3Crect x='11' y='8' width='2' height='6' rx='1' fill='%2312100c'/%3E%3Ccircle cx='12' cy='16.6' r='1.3' fill='%2312100c'/%3E%3C/svg%3E">
 <style>
   :root{--ink:#12100c;--ink-deep:#0c0a07;--paper:#e7e1ce;--muted:#a89e83;
     --faint:#8a8167;--marigold:#e8a93a;--marigold-dk:#b9822a;--signal-red:#b23a2e;
