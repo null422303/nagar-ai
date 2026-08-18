@@ -384,12 +384,13 @@
     }
     var slaBreached = (days * 24) > slaHours;
     var dept = issue.dept || DEPARTMENTS[category] || "General Administration";
-    var priority = m ? m.priority : Math.round(issue.priority_score || 0);
+    var priorityRaw = m ? m.priority : parseFloat(issue.priority_score || 0);
+    var priority = Math.round(priorityRaw); // display stamp
     var band = m ? m.band : (function () { try { return JSON.parse(issue.priority_reason || "{}").band || 3; } catch (e) { return 3; } })();
     var severity = m ? m.severity : Math.round(issue.severity || 3);
     var affected = m ? m.affected : (issue.affected_count || 1);
     var proximity = m ? m.proximity : 1.0;
-    return { severity: severity, affected: affected, days: days, proximity: proximity, nearName: null, priority: priority, category: category, status: status, slaHours: slaHours, slaBreached: slaBreached, dept: dept, lat: issue.centroid_lat, lng: issue.centroid_lng, band: band };
+    return { severity: severity, affected: affected, days: days, proximity: proximity, nearName: null, priority: priority, priorityRaw: priorityRaw, category: category, status: status, slaHours: slaHours, slaBreached: slaBreached, dept: dept, lat: issue.centroid_lat, lng: issue.centroid_lng, band: band };
   }
 
   function renderStats() {
@@ -412,6 +413,7 @@
     if (!map) return;
     markerLayer.clearLayers();
     var matchedPts = [];
+    var hasFilter = !!(catF || statF || areaF);
     issues.forEach(function (issue) {
       var m = clusterMetrics(issue);
       if (!m.lat) return;
@@ -421,10 +423,17 @@
       });
       mk.bindPopup("<b>" + catLabel(issue) + "</b><br>PRT " + m.priority + " · " + m.affected + " affected<br>" + esc(issue.summary || "").slice(0, 90) + "<br><i>" + esc(m.dept) + "</i>");
       mk.addTo(markerLayer);
+      // when filtering by area, highlight the matching markers with a ring
+      if (hasFilter) {
+        L.circleMarker([m.lat, m.lng], {
+          radius: 10 + Math.min(5, (m.affected || 1) * 0.5),
+          color: "#FFD54F", weight: 2, fillColor: "transparent", fillOpacity: 0
+        }).addTo(markerLayer);
+      }
       matchedPts.push([m.lat, m.lng]);
     });
     if (activeHighlight) { map.removeLayer(activeHighlight); activeHighlight = null; }
-    if (catF || statF) {
+    if (hasFilter) {
       if (matchedPts.length === 1) map.flyTo(matchedPts[0], 15, { duration: 1.1 });
       else if (matchedPts.length > 1) map.flyToBounds(L.latLngBounds(matchedPts), { padding: [60, 60], maxZoom: 14, duration: 1.1 });
     } else {
@@ -436,7 +445,7 @@
     var rows = issues.map(function (i) { return { issue: i, m: clusterMetrics(i) }; });
     if (sortF === "affected") rows.sort(function (a, b) { return b.m.affected - a.m.affected; });
     else if (sortF === "days") rows.sort(function (a, b) { return b.m.days - a.m.days; });
-    else rows.sort(function (a, b) { return b.m.priority - a.m.priority; });
+    else rows.sort(function (a, b) { return (b.m.priorityRaw || 0) - (a.m.priorityRaw || 0); });
     $("cardCount").textContent = rows.length + " clusters";
     var wrap = $("cardsWrap");
     wrap.innerHTML = "";
@@ -507,7 +516,7 @@
     });
     html += "</div>";
     wrap.innerHTML = html;
-    var open = issues.filter(function (i) { return i.status !== "resolved"; }).map(function (i) { return { issue: i, m: clusterMetrics(i) }; }).sort(function (a, b) { return b.m.priority - a.m.priority; });
+    var open = issues.filter(function (i) { return i.status !== "resolved"; }).map(function (i) { return { issue: i, m: clusterMetrics(i) }; }).sort(function (a, b) { return (b.m.priorityRaw || 0) - (a.m.priorityRaw || 0); });
     if (open.length) {
       var top = open[0];
       var r = {};
@@ -972,7 +981,6 @@
     if (judgingRunning) return;
     judgingRunning = true;
     var btn = $("loadJudging");
-    var runBtn = $("runDedup");
     btn.disabled = true;
     btn.textContent = "Loading 15 complaints (5 parallel)...";
     $("intakeLog").innerHTML = "";
@@ -1016,18 +1024,12 @@
         judgingRunning = false;
         btn.disabled = false;
         btn.textContent = "Load 15-complaint set";
-        runBtn.disabled = false;
         loadIssues();
         toast("Loaded 15 raw judging-set complaints" + (DEMO ? " through the offline pipeline." : " through server intake."));
       }
     }
 
     for (var i = 0; i < CONCURRENCY && rows.length; i++) submitRow(rows.shift());
-  });
-
-  $("runDedup").addEventListener("click", function () {
-    loadIssues();
-    toast("Live dedup: " + issues.length + " distinct issues" + (DEMO ? " (demo)." : " on the server."));
   });
 
   $("resetAll").addEventListener("click", function () {
@@ -1041,7 +1043,6 @@
       issues = [];
       $("intakeLog").innerHTML = "";
       $("intakeCount").textContent = "";
-      $("runDedup").disabled = true;
       if (activeHighlight) { map.removeLayer(activeHighlight); activeHighlight = null; }
       refresh();
       toast("Board reset (offline demo store cleared).");
@@ -1052,7 +1053,6 @@
       issues = [];
       $("intakeLog").innerHTML = "";
       $("intakeCount").textContent = "";
-      $("runDedup").disabled = true;
       if (activeHighlight) { map.removeLayer(activeHighlight); activeHighlight = null; }
       loadIssues();
       toast("Board reset — all complaints cleared from the server.");

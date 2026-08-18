@@ -381,8 +381,9 @@ def distinct_areas() -> list:
     return items
 
 
-def generate_report() -> dict:
-    """Extensive civic report from the complaints CSV, segregated by area."""
+def generate_report(area: Optional[str] = None) -> dict:
+    """Extensive civic report from the complaints CSV, segregated by area.
+    Optional `area` filter restricts the report to one resolved area."""
     import datetime as _dt
     rows = _read("complaints")
     total = len(rows)
@@ -394,6 +395,9 @@ def generate_report() -> dict:
         if r.get("loc_source") in ("gps", "photo_exif"):
             return "GPS / EXIF located"
         return "Unspecified"
+
+    if area:
+        rows = [r for r in rows if _area(r).lower() == area.lower()]
 
     def _sev(r):
         try:

@@ -233,11 +233,12 @@ async def get_areas():
 
 
 @router.get("/report")
-async def get_report(fmt: str = "json"):
+async def get_report(fmt: str = "json", area: Optional[str] = None):
     """Extensive civic report generated from the complaints CSV, segregated by area.
-    fmt=json → structured dict; fmt=markdown → printable markdown; fmt=csv → flat CSV."""
+    fmt=json → structured dict; fmt=markdown → printable markdown; fmt=csv → flat CSV.
+    Optional `area` filters the report to one resolved area."""
     from fastapi.responses import PlainTextResponse
-    report = store.generate_report()
+    report = store.generate_report(area=area)
     if fmt == "markdown":
         md = _render_report_markdown(report)
         return PlainTextResponse(md, media_type="text/markdown")
