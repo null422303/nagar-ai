@@ -664,12 +664,13 @@
   var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   var recognition = null;
   var silenceTimer = null;
+  var userStopped = false;
   var SILENCE_MS = 30000;
 
   function initSpeechRecognition() {
     if (SpeechRecognition) {
       recognition = new SpeechRecognition();
-      recognition.continuous = false;
+      recognition.continuous = true;
       recognition.interimResults = true;
     }
   }
@@ -678,7 +679,8 @@
   function resetSilenceTimer() {
     clearTimeout(silenceTimer);
     silenceTimer = setTimeout(function () {
-      // No speech for 30s → stop recognition (keeps listening through pauses).
+      // No speech for 30s → genuinely done; stop for real.
+      userStopped = true;
       stopVoiceIntake();
     }, SILENCE_MS);
   }
@@ -709,14 +711,24 @@
 
     recognition.onend = function () {
       clearTimeout(silenceTimer);
-      $("micBtnTxt").textContent = "Start recording";
-      micBtn.classList.remove("recording");
-      var t = $("inVoice").value.trim();
-      voiceTranscript = t;
-      if (t) {
-        micStatus.innerHTML = '<span style="color:var(--route-green);font-weight:700">Transcribed:</span> ' + esc(t);
-      } else {
-        micStatus.textContent = "Heard nothing clear — try again, or type it below.";
+      // If the user tapped stop (or the 30s silence gap fired) — finalize.
+      if (userStopped) {
+        $("micBtnTxt").textContent = "Start recording";
+        micBtn.classList.remove("recording");
+        var t = $("inVoice").value.trim();
+        voiceTranscript = t;
+        if (t) {
+          micStatus.innerHTML = '<span style="color:var(--route-green);font-weight:700">Transcribed:</span> ' + esc(t);
+        } else {
+          micStatus.textContent = "Heard nothing clear — try again, or type it below.";
+        }
+        return;
+      }
+      // The browser auto-ended (short pause, continuous mode quirk) — restart
+      // transparently so the recording keeps going while the user is speaking.
+      if (micBtn.classList.contains("recording")) {
+        try { recognition.start(); } catch (e) {}
+        resetSilenceTimer();
       }
     };
 
@@ -729,6 +741,7 @@
   }
 
   function stopVoiceIntake() {
+    userStopped = true;
     if (recognition) {
       try { recognition.stop(); } catch (e) {}
     }
@@ -743,6 +756,7 @@
     }
     if (micBtn.classList.contains("recording")) { stopVoiceIntake(); return; }
 
+    userStopped = false;
     var lang = micLang.value || "en-IN";
     $("inVoice").value = "";
     voiceTranscript = "";
@@ -1162,6 +1176,29 @@
     });
   }
   $("reportClose").addEventListener("click", function () { $("reportOverlay").classList.remove("show"); });
+
+  /* Download the report as a .md file (uses the last fetched report). */
+  var reportDownloadBtn = $("reportDownloadBtn");
+  if (reportDownloadBtn) {
+    reportDownloadBtn.addEventListener("click", function () {
+      if (!lastReportMd) {
+        toast("Open the report first, then download.", true);
+        return;
+      }
+      var d = new Date();
+      var pad = function (n) { return n < 10 ? "0" + n : n; };
+      var blob = new Blob([lastReportMd], { type: "text/markdown" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = "nagarai-report-" + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + ".md";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+      toast("Report downloaded.");
+    });
+  }
 
   /* Share the report via email (mailto with the markdown as the body). */
   var shareEmailBtn = $("reportShareEmail");
