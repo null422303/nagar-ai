@@ -422,7 +422,18 @@
   .modal-box--report .report-head{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 22px 10px; border-bottom:1px solid var(--line-soft); flex-wrap:wrap;}
   .modal-box--report .report-head h3{margin:0; font-size:1.1rem;}
   .modal-box--report .report-head .modal-actions{display:flex; gap:8px; flex-wrap:wrap;}
-  .report-body{overflow:auto; padding:16px 22px 22px; font-size:.78rem; line-height:1.6; color:#2b261a; font-family:var(--mono); white-space:pre-wrap; word-break:break-word;}
+  .report-body{overflow:auto; padding:16px 22px 22px; font-size:.8rem; line-height:1.6; color:#2b261a; font-family:var(--mono); word-break:break-word;}
+  .report-body h2{font-size:1.05rem; color:var(--signal-red); margin:18px 0 6px; text-transform:uppercase; letter-spacing:.05em;}
+  .report-body h3{font-size:.95rem; color:#b8860b; margin:16px 0 6px;}
+  .report-body h4{font-size:.9rem; color:#6b4f1a; margin:14px 0 4px;}
+  .report-body p{margin:4px 0;}
+  .report-body li{margin:2px 0 2px 16px; list-style:disc;}
+  .report-body table{border-collapse:collapse; width:100%; margin:8px 0 14px; font-size:.74rem;}
+  .report-body th,.report-body td{border:1px solid #d8cfa8; padding:4px 8px; text-align:left; vertical-align:top;}
+  .report-body th{background:#f3ecd2; color:#6b4f1a; font-weight:700; text-transform:uppercase; letter-spacing:.04em;}
+  .report-body tr:nth-child(even) td{background:#faf7ec;}
+  .report-body code{background:#f0e9cf; padding:0 3px; border-radius:2px; font-size:.9em;}
+  .report-body hr{border:none; border-top:1px dashed var(--line-soft); margin:14px 0;}
   .modal-err{color:var(--signal-red); font-size:.72rem; min-height:16px; margin-bottom:6px; font-weight:600;}
   .modal-actions{display:flex; gap:8px; justify-content:flex-end; margin-top:12px;}
   .modal-hint{font-family:var(--mono); font-size:.66rem; color:#6b6350; margin-top:10px;}
@@ -739,7 +750,6 @@
             <div class="toolbar">
               <button class="btn btn--amber" id="loadJudging" type="button">Load 15-complaint set</button>
               <button class="btn btn--ghost btn--dark" id="viewReport" type="button">👁 View report</button>
-              <button class="btn btn--green" id="downloadReport" type="button">⬇ Download report</button>
               <button class="btn btn--ghost btn--dark" id="resetAll" type="button">Reset board</button>
             </div>
           </div>
@@ -846,8 +856,8 @@
     <div class="report-head">
       <h3 id="reportTitle">Civic intake report</h3>
       <div class="modal-actions">
+        <button class="btn" id="reportShareEmail" type="button">✉️ Share via email</button>
         <button class="btn btn--ghost" id="reportClose" type="button">Close</button>
-        <button class="btn" id="reportDownloadBtn" type="button">⬇ Download</button>
       </div>
     </div>
     <div class="report-body" id="reportBody"></div>

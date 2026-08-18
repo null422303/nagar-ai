@@ -664,7 +664,7 @@
   var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   var recognition = null;
   var silenceTimer = null;
-  var SILENCE_MS = 3000;
+  var SILENCE_MS = 30000;
 
   function initSpeechRecognition() {
     if (SpeechRecognition) {
@@ -674,11 +674,11 @@
     }
   }
 
-  // Reset the 3-second silence countdown on every speech result.
+  // Reset the inactivity countdown on every speech result.
   function resetSilenceTimer() {
     clearTimeout(silenceTimer);
     silenceTimer = setTimeout(function () {
-      // No speech for 3s → stop recognition (keeps listening through short pauses).
+      // No speech for 30s → stop recognition (keeps listening through pauses).
       stopVoiceIntake();
     }, SILENCE_MS);
   }
@@ -1062,6 +1062,68 @@
   });
 
   /* ================= REPORT (view + download) ================= */
+  /* Minimal self-hosted markdown → HTML renderer (headings, tables, lists,
+     bold, code, hr, links). Covers the structure emitted by /api/report. */
+  function mdEscape(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function mdInline(s) {
+    return mdEscape(s)
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  }
+  function mdRender(src) {
+    var lines = String(src || "").split("\n");
+    var html = [];
+    var inTable = false;
+    var table = [];
+    var i = 0;
+
+    function flushTable() {
+      if (!inTable) return;
+      inTable = false;
+      var out = "<table>";
+      for (var r = 0; r < table.length; r++) {
+        out += "<tr>" + table[r].map(function (c) {
+          var tag = r === 0 ? "th" : "td";
+          return "<" + tag + ">" + mdInline(c) + "</" + tag + ">";
+        }).join("") + "</tr>";
+      }
+      html.push(out + "</table>");
+      table = [];
+    }
+
+    for (; i < lines.length; i++) {
+      var ln = lines[i];
+      var t = ln.trim();
+
+      if (!t) { flushTable(); html.push(""); continue; }
+
+      // table separator row like |---|---|
+      if (/^\|[\s:|-]+\|$/.test(t) && inTable) { continue; }
+
+      // table row
+      if (t.charAt(0) === "|" && t.charAt(t.length - 1) === "|") {
+        if (!inTable) { inTable = true; table = []; }
+        table.push(t.slice(1, -1).split("|").map(function (c) { return c.trim(); }));
+        continue;
+      }
+      flushTable();
+
+      if (/^###\s/.test(t)) html.push("<h4>" + mdInline(t.replace(/^###\s*/, "")) + "</h4>");
+      else if (/^##\s/.test(t)) html.push("<h3>" + mdInline(t.replace(/^##\s*/, "")) + "</h3>");
+      else if (/^#\s/.test(t)) html.push("<h2>" + mdInline(t.replace(/^#\s*/, "")) + "</h2>");
+      else if (/^[-*]\s/.test(t)) html.push("<li>" + mdInline(t.replace(/^[-*]\s*/, "")) + "</li>");
+      else if (/^\d+\.\s/.test(t)) html.push("<li>" + mdInline(t.replace(/^\d+\.\s*/, "")) + "</li>");
+      else if (/^---+\s*$/.test(t)) html.push("<hr>");
+      else html.push("<p>" + mdInline(t) + "</p>");
+    }
+    flushTable();
+    return html.join("\n");
+  }
+
   function fetchReport(fmt) {
     return fetch(API + "/report?fmt=" + fmt).then(function (r) {
       if (!r.ok) throw new Error(r.status + " " + r.statusText);
@@ -1069,47 +1131,12 @@
     });
   }
 
-  function downloadReportFile() {
-    var d = new Date();
-    var pad = function (n) { return n < 10 ? "0" + n : n; };
-    return fetchReport("markdown").then(function (text) {
-      var blob = new Blob([text], { type: "text/markdown" });
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement("a");
-      a.href = url;
-      a.download = "nagarai-report-" + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + ".md";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
-    });
-  }
-
   var reportBtn = $("downloadReport");
-  if (reportBtn) {
-    reportBtn.addEventListener("click", function () {
-      var btn = reportBtn;
-      btn.disabled = true;
-      var orig = btn.textContent;
-      btn.textContent = "Generating...";
-      if (DEMO) {
-        btn.textContent = orig; btn.disabled = false;
-        toast("Report is only available with the live server.", true);
-        return;
-      }
-      downloadReportFile().then(function () {
-        toast("Report downloaded — complaints CSV, area-segregated.");
-      }).catch(function (e) {
-        toast("Report error: " + e.message, true);
-      }).then(function () {
-        btn.disabled = false;
-        btn.textContent = orig;
-      });
-    });
-  }
+  if (reportBtn) { reportBtn.remove(); }
 
   /* View report: renders the markdown inside the admin panel. */
   var viewReportBtn = $("viewReport");
+  var lastReportMd = "";
   if (viewReportBtn) {
     viewReportBtn.addEventListener("click", function () {
       if (DEMO) {
@@ -1121,9 +1148,10 @@
       var orig = btn.textContent;
       btn.textContent = "Loading...";
       fetchReport("markdown").then(function (md) {
+        lastReportMd = md;
         var body = $("reportBody");
         if (!body) throw new Error("report viewer missing");
-        body.textContent = md; // render raw md (pre-wrap, mono)
+        body.innerHTML = mdRender(md);
         $("reportOverlay").classList.add("show");
       }).catch(function (e) {
         toast("Report error: " + e.message, true);
@@ -1134,10 +1162,24 @@
     });
   }
   $("reportClose").addEventListener("click", function () { $("reportOverlay").classList.remove("show"); });
-  $("reportDownloadBtn").addEventListener("click", function () {
-    downloadReportFile().then(function () { toast("Report downloaded."); })
-      .catch(function (e) { toast("Report error: " + e.message, true); });
-  });
+
+  /* Share the report via email (mailto with the markdown as the body). */
+  var shareEmailBtn = $("reportShareEmail");
+  if (shareEmailBtn) {
+    shareEmailBtn.addEventListener("click", function () {
+      if (!lastReportMd) {
+        toast("Open the report first, then share.", true);
+        return;
+      }
+      var d = new Date();
+      var pad = function (n) { return n < 10 ? "0" + n : n; };
+      var subject = "NagarAI civic intake report — " + d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+      var body = encodeURIComponent(lastReportMd);
+      window.location.href = "mailto:?subject=" + encodeURIComponent(subject) + "&body=" + body;
+      toast("Email app opened with the report.");
+    });
+  }
+
   $("reportOverlay").addEventListener("click", function (e) {
     if (e.target === $("reportOverlay")) $("reportOverlay").classList.remove("show");
   });
