@@ -5,10 +5,10 @@ languages, photo, or text — any mix); officials get a **deduplicated, categori
 queue with explainable ranking.
 
 **Live demo:** `<YOUR_DEMO_URL>` (trusted HTTPS — mic + geolocation work)
-**Admin password:** `<ADMIN_PASSWORD>`
+**Admin password:** `admin@nagarai`
 
-> **🔐 Where to change your credentials & URL** — this repo has placeholders only.
-> Replace them with your own values before running/deploying:
+> **🔐 Where to change your credentials & URL** — API keys are placeholders; the demo
+> admin password is included so judges can log in.
 >
 > | Placeholder | Where to change it |
 > |---|---|
@@ -16,7 +16,7 @@ queue with explainable ranking.
 > | `<YOUR_API_URL>` | `scripts/robustness_battery.py` (`HOST`) and `scripts/run_bench.py` (`--host`) |
 > | `<YOUR_SERVER>` / `<YOUR_SERVER_IP>` | `scripts/deploy.sh` (`SERVER=`) |
 > | `<YOUR_DASHSCOPE_KEY>` / `<YOUR_OPENROUTER_KEY>` | `backend/.env` (copy from `.env.example`) and `scripts/deploy.sh`. Add multiple DashScope keys as `DASHSCOPE_API_KEYS=k1,k2,k3` for round-robin + auto-retry. |
-> | `<ADMIN_PASSWORD>` | `frontend/site/assets/js/app.js` (`ADMIN_PASSWORD`) and `frontend/standalone/index.html` |
+> | `RECAPTCHA_SITE_KEY` / `RECAPTCHA_SECRET_KEY` | `backend/.env` (optional — human verification on submissions) |
 >
 > The backend `.env` is gitignored — never commit API keys. The admin password is
 > client-side for this demo; move it server-side before any real deployment.
@@ -33,6 +33,10 @@ queue with explainable ranking.
 ![Track status](docs/screenshots/2-track-status.png)
 ![Map fullscreen](docs/screenshots/4-map-fullscreen.png)
 ![Receipt](docs/screenshots/5-receipt.png)
+
+**VPN-blocked page** — clients behind a VPN/proxy are redirected here:
+
+![VPN blocked](docs/screenshots/6-vpn-blocked.png)
 
 ## Docs
 - **📖 [Usage guide](docs/USAGE.md)** — step-by-step for citizens, tracking, and officials
@@ -91,23 +95,28 @@ which also gives HTTPS so mic + geolocation work. See [ARCHITECTURE.md](ARCHITEC
 ## Features
 - **Multimodal intake** — live voice (browser Web Speech API, 9 Indian languages, native script, English default), photo (vision-only classification — no text needed, EXIF GPS + visible signage auto-locate), text (any mix) → one structured complaint
 - **Dynamic AI categories** — creates a new category + label + colour + tags when an issue doesn't fit the standard four; ambiguity → `other`, unrelated content → `spam` (quarantined, never clustered). Dropdown lists all live categories.
-- **Extensive CSV report** — admin "Download report" button generates a markdown report from the complaints CSV: totals, category/severity/channel/department breakdowns, top tags, and a full **area-segregated** breakdown with per-location issue tables.
+- **Extensive CSV report** — admin "View report" opens the markdown report (tables/headings rendered) with **Download** + **Share via email** buttons: totals, category/severity/channel/department breakdowns, top tags, and a full **area-segregated** breakdown with per-location issue tables.
 - **Dedup** — canonicalize-then-embed + geo + vision; merges duplicates with an explainable "why merged" audit trail
 - **Explainable priority (PRT)** — severity-band formula (band·P·T·L), every term visible on cards
 - **Tickets** — every complaint has an ID; status chain Open → Assigned → In Progress → Resolved
 - **Auto-locate** — browser GPS auto-fills location; photo EXIF GPS as fallback
-- **Ward map** — Leaflet, category filters, fullscreen, judging-set demo
+- **Ward map** — Leaflet, category + area filters, color-coded legend, fullscreen, judging-set demo
+- **VPN/proxy blocking** — free ip-api detection; blocked clients redirected to a themed `/vpn-blocked` page (with red-triangle tab icon)
+- **Human verification** — Google reCAPTCHA on submissions (optional keys); free math-captcha on admin login
 
 ## Files
 ```
 backend/app/
-  api/routes.py        FastAPI endpoints (intake, /asr, issues, status, search/stats/recent, reset)
+  api/routes.py        FastAPI endpoints (intake, /asr, issues, status, search/stats/recent, categories/areas/report, captcha, reset)
   engines/dedup.py     canonicalize-then-embed clustering + SLA routing
   engines/priority.py  severity-band priority (PRT) formula
-  services/ai.py       DashScope/OpenRouter clients + multi-key round-robin + CSV cache + webm→wav  services/intake.py   voice/photo/text → structured complaint merge policy (photo-only supported)
+  services/ai.py       DashScope/OpenRouter clients + multi-key round-robin + CSV cache + webm→wav
+  services/intake.py   voice/photo/text → structured complaint merge policy (photo-only supported)
   services/geocode.py  Nominatim/Overpass with retry + POI cache
   services/photo_meta.py  exact EXIF extraction (piexif) + orientation fix
+  services/vpn_detect.py  free VPN/proxy detection (ip-api.com, cached)
   models/store.py      CSV storage (complaints, issues, memberships)
+  main.py              app + themed /vpn-blocked page + VPN guard middleware
 frontend/site/         the Ward Control Room UI (self-hosted fonts/JS, 3 views) — production skin
 frontend/standalone/   older single-file UI
 frontend/src/          older React app (glassmorphic)

@@ -648,7 +648,7 @@
   });
 
   /* ================= ADMIN LOGIN ================= */
-  var ADMIN_PASSWORD = "<ADMIN_PASSWORD>";
+  var ADMIN_PASSWORD = "admin@nagarai";
   var overlay = $("adminLoginOverlay");
   var pwInput = $("adminPasswordInput");
   var captchaAnswer = 0;

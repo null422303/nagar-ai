@@ -1,7 +1,7 @@
 # NagarAI Live Demo Script (judging order)
 
 **URL:** <YOUR_DEMO_URL> (HTTPS — needed for mic; click through self-signed warning once)
-**Admin password:** `<ADMIN_PASSWORD>`
+**Admin password:** `admin@nagarai`
 
 > Pre-flight: `curl -sk <YOUR_DEMO_URL>/api/health` → `{"ok":true}`
 
@@ -11,7 +11,7 @@
 Three views in one page (starfield background):
 - **👤 Citizen — File a Complaint** (public): voice/photo/text tabs + GPS/EXIF location
 - **🔎 Track Status** (public): complaint ID → progress steps
-- **🛡 Admin — Ward Control Room** (login `<ADMIN_PASSWORD>`): map, cluster cards, PRT formula
+- **🛡 Admin — Ward Control Room** (login `admin@nagarai`): map, cluster cards, PRT formula
 
 ## 1. Intake robustness (multimodal, messy, live) — ~3 min
 Run `python scripts/robustness_battery.py --host <YOUR_DEMO_URL>` — it fires the printed
@@ -30,7 +30,7 @@ fallback** when nothing pinpoints a location.
 
 ## 2. Live 15-complaint dedup run (the 30%) — ~4 min
 In the **admin** view → JUDGING SET panel → **Load 15-complaint set** (posts through the server
-intake), then **Run live dedup**.
+intake; dedup runs automatically on each submission).
 
 - Watch clusters form **live on the map** and in the cluster cards.
 - Open a merged cluster → the LIVE MERGED CLUSTERS panel shows per-member
@@ -52,9 +52,16 @@ intake), then **Run live dedup**.
 3. Officer clicks **✓ Resolve** → status flips; citizens of the cluster "notified".
 4. Citizen opens **Track Status** with their ID → progress bar shows **RESOLVED 🎉**.
 
-## 5. Tech-note readout — 30s
+## 5. Reports + anti-abuse — 1 min
+- **👁 View report** opens the area-segregated markdown report (rendered tables); **⬇ Download**
+  saves it, **✉️ Share via email** sends it.
+- Show the **category + area filters** and the auto-updating **colour legend** under the map.
+- Note: VPN/proxy connections are blocked (themed `/vpn-blocked` page) and admin login has a
+  free math human-check.
+
+## 6. Tech-note readout — 30s
 Models/endpoints used, canonicalize-then-embed insight (the Tamil-embedding measurement),
-severity-band rationale, EXIF-as-location, failure modes (voxtral noise → clarify; vision on
+severity-band rationale, EXIF-as-location, failure modes (live voice browser-dependent; vision on
 ambiguous photos).
 
 ---

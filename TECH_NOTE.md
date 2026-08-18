@@ -40,6 +40,9 @@ voice is transcribed **live in the browser** via the Web Speech API in the speak
 - **Speed**: `enable_thinking:false` on DashScope chat cuts extraction/vision from ~14s to ~2s (full
   complaint ~25s → ~4s). Live voice is instant. DashScope calls round-robin across multiple API keys
   with auto-retry on quota/5xx.
+- **Anti-abuse**: free VPN/proxy detection (ip-api.com, per-IP cached) blocks anonymized clients
+  and redirects them to a themed `/vpn-blocked` page; optional reCAPTCHA on submissions; admin login
+  uses a free math human-check.
 
 ## Results (synthetic 15-complaint bench, live on production)
 Purity **1.0** · coverage **1.0** · merge accuracy **1.0** · category accuracy **1.0**.

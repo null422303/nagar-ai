@@ -1,7 +1,7 @@
 # NAGAR AI — Ward Control Room
 ### Civic Complaint Intelligence Engine · PS-S05 · One-Page Snapshot
 
-**Live demo:** `<YOUR_DEMO_URL>` · **Admin password:** `<ADMIN_PASSWORD>`
+**Live demo:** `<YOUR_DEMO_URL>` · **Admin password:** `admin@nagarai`
 
 ---
 
@@ -24,7 +24,7 @@ The AI extracts one structured complaint, **deduplicates** against live clusters
 | Deduplication quality | 30% | **purity 1.0 · coverage 1.0 · merge accuracy 1.0** (15-complaint set → exactly 5 issues) |
 | Multimodal intake robustness | 25% | noisy Tamil voice (thanglish verbatim), photo-only upload, mixed-language rant, EXIF GPS — **5/5 robustness battery PASS** |
 | Explainable prioritisation | 20% | severity-band PRT formula, every term on-screen, worked example |
-| Official dashboard utility | 15% | map + filters + cluster cards + one-click status + SLA |
+| Official dashboard utility | 15% | map + category/area filters + colour legend + cluster cards + one-click status + SLA + **CSV report (view/download/email)** |
 | End-to-end completeness | 10% | full loop live: file → dedup → priority → resolve → track |
 
 ## Key original work
@@ -38,12 +38,16 @@ The AI extracts one structured complaint, **deduplicates** against live clusters
 - **Exact photo EXIF** — cm-level GPS + DMS, sub-second capture time, camera, altitude, heading;
   photo-EXIF GPS is a first-class location source (also auto-locates via browser GPS and vision signage).
 - **Tickets** — every complaint has an ID; status chain Open → Assigned → In Progress → Resolved.
+- **Anti-abuse** — VPN/proxy connections are blocked (free ip-api detection) and redirected
+  to a themed `/vpn-blocked` page; submissions have optional reCAPTCHA; admin login has a
+  free math human-check.
 
 ## Stack
-FastAPI (Python) · OpenRouter voxtral ASR · DashScope qwen3.7-flash / qwen-vl / embeddings ·
+FastAPI (Python) · live browser Web Speech API voice · DashScope qwen3.7-flash / qwen-vl / embeddings ·
 piexif EXIF · Leaflet map · CSV storage · self-hosted Ward Control Room UI · HTTPS via Caddy/sslip.io
 
 ## Honest limitations
-- ASR is API-based (voxtral); heavy noise can trigger a graceful "please repeat" — never fake output.
+- Live voice uses the browser Web Speech API (quality varies by browser); heavy noise can
+  yield a partial transcript — always editable before submit.
 - No local models — full offline is a demo fallback (clearly marked OFFLINE DEMO).
 - 1-core server, CSV storage: built for hackathon scale.

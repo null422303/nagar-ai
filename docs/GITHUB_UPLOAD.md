@@ -42,8 +42,9 @@ echo "backend/.env" >> .gitignore
 git add .gitignore && git commit -m "stop tracking .env"
 ```
 
-> ⚠️ The demo admin password (`<ADMIN_PASSWORD>`) is a **placeholder** in the repo — the
-> real value exists only on the live server. The API keys are **never** committed.
+> ⚠️ The demo admin password (`admin@nagarai`) is included so judges can log in — it's a
+> client-side demo credential only. The **API keys** are **never** committed (`.env` is
+> gitignored).
 
 ---
 

@@ -5,7 +5,7 @@ NagarAI is a **civic complaint intelligence engine**: citizens file complaints n
 **deduplicated, categorised, prioritised, mapped** queue with explainable ranking.
 
 **Live demo:** `<YOUR_DEMO_URL>` (trusted HTTPS — geolocation + mic work)
-**Admin password:** `<ADMIN_PASSWORD>`
+**Admin password:** `admin@nagarai`
 
 ---
 
@@ -64,17 +64,22 @@ After submitting you get a receipt showing:
 
 ## 3. Admin — Ward control room
 
-Log in with the password (`<ADMIN_PASSWORD>`).
+Log in with the password (`admin@nagarai`). A simple **human check** (a sum) must be
+answered correctly alongside the password — free, no external service.
 
 ### Ward map
 - Cluster markers sized by affected count, coloured by category.
 - Click a marker for its popup (category, priority, affected, summary).
+- **Category** and **Area** dropdowns filter the cards AND highlight the matching markers on the map.
+- A **color-coded legend** under the map lists every live category (incl. AI-created ones) and auto-updates.
 - **Fullscreen** button expands the map; filters hide in fullscreen and return on exit.
 
 ### Filters
-- **Category** (pothole / garbage / streetlight / waterlogging / AI-created types)
+- **Category** (pothole / garbage / streetlight / waterlogging / AI-created types / spam)
+- **Area** (all areas seen in complaints, with counts — auto-updates as new areas appear)
 - **Status** (open / assigned / in progress / resolved)
-- **Sort** (priority ↓ / days pending ↓ / affected ↓)
+- **Sort** (PRT ↓ / days pending ↓ / affected ↓)
+- **Search** box (free text)
 
 ### Cluster cards
 Each card shows:
@@ -91,11 +96,16 @@ score = band(Severity) · P(affected, log-damped) · T(days, saturating) · L(pr
 - Within bands, rank = P × T × L.
 - Every term is shown on the cards and in the **PRT formula** panel.
 
+### Reports
+- **View report** renders the full markdown report in a modal (rendered tables/headings):
+  totals, category/severity/channel/department breakdowns, top tags, and an
+  **area-segregated** breakdown.
+- **⬇ Download** saves it as `.md`; **✉️ Share via email** opens a mailto with the report body.
+
 ### Judging set (live dedup demo)
 - **Load 15-complaint set** posts 15 real complaints through the AI pipeline (3-parallel).
-- **Run live dedup** re-renders the clusters.
-- The **LIVE MERGED CLUSTERS** panel shows each merge with its similarity scores
-  (text · geo · vision) — the "why merged" audit trail.
+- Dedup runs automatically on every intake; the **LIVE MERGED CLUSTERS** panel shows each
+  merge with its similarity scores (text · geo · vision) — the "why merged" audit trail.
 
 ---
 
@@ -137,3 +147,6 @@ Transcription runs **in your browser** via the Web Speech API — words appear l
 - **Speak clearly** for voice; background noise is handled but a quiet clip is best.
 - **Keep the ticket ID** when you file — it's your tracking key.
 - Admin card actions: assign first, then progress, then resolve.
+- **VPN/proxy protection**: the app blocks connections that come through a VPN or proxy
+  (location verification). VPN users are redirected to `/vpn-blocked` — disable the VPN
+  to use the ward control room.

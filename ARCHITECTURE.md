@@ -22,13 +22,14 @@ Admin map/board → resolve → citizen track status
 ## Key components
 | Layer | Files | Role |
 |---|---|---|
-| API | `backend/app/api/routes.py` | `/complaints`, `/asr`, `/issues`, `/status`, `/search`, `/stats`, `/recent`, `/reset`, `/health` |
-| Intake | `backend/app/services/intake.py` | voice/photo/text → one structured complaint; dynamic AI categories |
+| API | `backend/app/api/routes.py` | `/complaints`, `/asr`, `/issues`, `/status`, `/search`, `/stats`, `/recent`, `/categories`, `/areas`, `/report`, `/captcha/*`, `/reset`, `/health` |
+| Intake | `backend/app/services/intake.py` | voice/photo/text → one structured complaint; dynamic AI categories + tags |
 | Dedup | `backend/app/engines/dedup.py` | canonicalize-then-embed, geo-fenced online clustering, SLA routing |
 | Priority | `backend/app/engines/priority.py` | severity-band formula (band(S)·P·T·L) |
 | AI clients | `backend/app/services/ai.py` | DashScope + OpenRouter, CSV response cache, webm→wav |
 | Geocode | `backend/app/services/geocode.py` | Nominatim/Overpass with retry + POI cache |
 | Photo meta | `backend/app/services/photo_meta.py` | exact EXIF (GPS, camera, time, altitude, heading) |
+| VPN guard | `backend/app/services/vpn_detect.py` + `main.py` | free VPN/proxy detection; themed `/vpn-blocked` page |
 | Storage | `backend/app/models/store.py` | CSV tables (complaints, issues, memberships, poi) |
 | Frontend | `frontend/site/` | self-hosted Ward Control Room (3 views), no build step |
 
