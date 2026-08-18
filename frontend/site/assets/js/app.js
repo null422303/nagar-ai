@@ -712,6 +712,7 @@
   var recognition = null;
   var silenceTimer = null;
   var userStopped = false;
+  var voiceAccum = ""; // accumulated transcript across auto-end restarts
   var SILENCE_MS = 30000;
 
   function initSpeechRecognition() {
@@ -749,8 +750,13 @@
           interimTranscript += event.results[i][0].transcript;
         }
       }
-      if (interimTranscript && onInterim) onInterim(interimTranscript);
-      if (finalTranscript && onFinal) onFinal(finalTranscript);
+      if (finalTranscript) {
+        // keep every completed segment so pauses don't reset the text
+        voiceAccum += finalTranscript + " ";
+      }
+      if (interimTranscript && onInterim) onInterim(voiceAccum + interimTranscript);
+      else if (finalTranscript && onFinal) onFinal(voiceAccum);
+      else if (onInterim) onInterim(voiceAccum);
       resetSilenceTimer();
     };
 
@@ -805,17 +811,18 @@
 
     userStopped = false;
     var lang = micLang.value || "en-IN";
+    voiceAccum = "";
     $("inVoice").value = "";
     voiceTranscript = "";
 
     startVoiceIntake(
       lang,
-      // On interim: stream partial words live
+      // On interim: stream partial words live (on top of what's already final)
       function (interim) {
         $("inVoice").value = interim;
         micStatus.innerHTML = '<span class="mic-dot"></span>Transcribing live<span style="color:var(--faint)"> (interim)</span> — stop to keep';
       },
-      // On final: speech complete → keep text
+      // On final: speech complete → keep the accumulated text
       function (final) {
         $("inVoice").value = final;
         micStatus.innerHTML = '<span style="color:var(--route-green);font-weight:700">Transcribed:</span> ' + esc(final);
