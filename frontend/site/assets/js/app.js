@@ -297,26 +297,39 @@
     });
   }
 
-  /* Dynamic category dropdown: populate from /api/categories so AI-created types
-     (open_manhole, stray_cattle, …) and spam appear as filter options. */
+  /* Dynamic category dropdown + color legend: populate from /api/categories so
+     AI-created types (open_manhole, stray_cattle, …) and spam appear automatically. */
   function loadCategories() {
-    if (DEMO) return;
+    var legend = $("mapLegend");
+    if (DEMO) {
+      // offline demo: static legend for the known categories
+      if (legend) {
+        legend.innerHTML = ["pothole", "garbage", "broken_streetlight", "waterlogging", "other"].map(function (k) {
+          return '<span class="legend-item"><span class="legend-dot" style="background:' + (CAT_COLOR[k] || "#7A877A") + '"></span>' + (CAT_LABEL[k] || k) + "</span>";
+        }).join("");
+      }
+      return;
+    }
     var sel = $("fCategory");
-    if (!sel) return;
-    var current = sel.value;
+    if (!sel && !legend) return;
+    var current = sel ? sel.value : "";
     j("GET", "/categories").then(function (cats) {
       if (!cats || !cats.length) return;
-      var kept = ['<option value="">All categories</option>'];
-      cats.forEach(function (c) {
-        var key = c.key === "streetlight" ? "streetlight" : c.key; // keep UI alias
-        kept.push('<option value="' + esc(key) + '"' + (current === key ? " selected" : "") + ">" + esc(c.label) + "</option>");
-      });
-      // always keep the four known ones even if count is 0
-      ["pothole", "garbage", "broken_streetlight", "waterlogging", "spam"].forEach(function (k) {
-        var present = cats.some(function (c) { return (c.key === k); });
-        if (!present && k !== "spam") return; // only enforce known types if missing entirely
-      });
-      sel.innerHTML = kept.join("");
+      if (sel) {
+        var kept = ['<option value="">All categories</option>'];
+        cats.forEach(function (c) {
+          var key = c.key === "streetlight" ? "streetlight" : c.key; // keep UI alias
+          kept.push('<option value="' + esc(key) + '"' + (current === key ? " selected" : "") + ">" + esc(c.label) + "</option>");
+        });
+        sel.innerHTML = kept.join("");
+      }
+      if (legend) {
+        // render legend from live categories (colors auto-update as new types appear)
+        var items = cats.map(function (c) {
+          return '<span class="legend-item"><span class="legend-dot" style="background:' + esc(c.color) + '"></span>' + esc(c.label) + "</span>";
+        }).join("");
+        legend.innerHTML = items;
+      }
     }).catch(function () { /* keep static options on failure */ });
   }
 
