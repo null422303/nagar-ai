@@ -1061,11 +1061,33 @@
     }).then(finish);
   });
 
-  /* ================= DOWNLOAD REPORT ================= */
+  /* ================= REPORT (view + download) ================= */
+  function fetchReport(fmt) {
+    return fetch(API + "/report?fmt=" + fmt).then(function (r) {
+      if (!r.ok) throw new Error(r.status + " " + r.statusText);
+      return r.text();
+    });
+  }
+
+  function downloadReportFile() {
+    var d = new Date();
+    var pad = function (n) { return n < 10 ? "0" + n : n; };
+    return fetchReport("markdown").then(function (text) {
+      var blob = new Blob([text], { type: "text/markdown" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = "nagarai-report-" + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + ".md";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+    });
+  }
+
   var reportBtn = $("downloadReport");
   if (reportBtn) {
     reportBtn.addEventListener("click", function () {
-      var fmt = "markdown"; // also available: csv / json via ?fmt=
       var btn = reportBtn;
       btn.disabled = true;
       var orig = btn.textContent;
@@ -1075,21 +1097,7 @@
         toast("Report is only available with the live server.", true);
         return;
       }
-      fetch(API + "/report?fmt=" + fmt).then(function (r) {
-        if (!r.ok) throw new Error(r.status + " " + r.statusText);
-        return r.text();
-      }).then(function (text) {
-        var blob = new Blob([text], { type: "text/markdown" });
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement("a");
-        var d = new Date();
-        var pad = function (n) { return n < 10 ? "0" + n : n; };
-        a.href = url;
-        a.download = "nagarai-report-" + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + ".md";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+      downloadReportFile().then(function () {
         toast("Report downloaded — complaints CSV, area-segregated.");
       }).catch(function (e) {
         toast("Report error: " + e.message, true);
@@ -1099,6 +1107,40 @@
       });
     });
   }
+
+  /* View report: renders the markdown inside the admin panel. */
+  var viewReportBtn = $("viewReport");
+  if (viewReportBtn) {
+    viewReportBtn.addEventListener("click", function () {
+      if (DEMO) {
+        toast("Report is only available with the live server.", true);
+        return;
+      }
+      var btn = viewReportBtn;
+      btn.disabled = true;
+      var orig = btn.textContent;
+      btn.textContent = "Loading...";
+      fetchReport("markdown").then(function (md) {
+        var body = $("reportBody");
+        if (!body) throw new Error("report viewer missing");
+        body.textContent = md; // render raw md (pre-wrap, mono)
+        $("reportOverlay").classList.add("show");
+      }).catch(function (e) {
+        toast("Report error: " + e.message, true);
+      }).then(function () {
+        btn.disabled = false;
+        btn.textContent = orig;
+      });
+    });
+  }
+  $("reportClose").addEventListener("click", function () { $("reportOverlay").classList.remove("show"); });
+  $("reportDownloadBtn").addEventListener("click", function () {
+    downloadReportFile().then(function () { toast("Report downloaded."); })
+      .catch(function (e) { toast("Report error: " + e.message, true); });
+  });
+  $("reportOverlay").addEventListener("click", function (e) {
+    if (e.target === $("reportOverlay")) $("reportOverlay").classList.remove("show");
+  });
 
   var searchQ = "";
   var searchTimer = null;

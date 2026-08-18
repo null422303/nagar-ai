@@ -417,6 +417,12 @@
   .modal-box h3{font-size:1.6rem; margin:20px 0 2px; color:var(--signal-red);}
   .modal-box .sub{font-size:.68rem; color:#6b6350; margin-bottom:16px; text-transform:uppercase; letter-spacing:.08em;}
   .modal-box input{margin-bottom:6px;}
+  /* report viewer */
+  .modal-box--report{max-width:860px; width:100%; max-height:86vh; display:flex; flex-direction:column; padding:0 0 0 0; overflow:hidden;}
+  .modal-box--report .report-head{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 22px 10px; border-bottom:1px solid var(--line-soft); flex-wrap:wrap;}
+  .modal-box--report .report-head h3{margin:0; font-size:1.1rem;}
+  .modal-box--report .report-head .modal-actions{display:flex; gap:8px; flex-wrap:wrap;}
+  .report-body{overflow:auto; padding:16px 22px 22px; font-size:.78rem; line-height:1.6; color:#2b261a; font-family:var(--mono); white-space:pre-wrap; word-break:break-word;}
   .modal-err{color:var(--signal-red); font-size:.72rem; min-height:16px; margin-bottom:6px; font-weight:600;}
   .modal-actions{display:flex; gap:8px; justify-content:flex-end; margin-top:12px;}
   .modal-hint{font-family:var(--mono); font-size:.66rem; color:#6b6350; margin-top:10px;}
@@ -732,6 +738,7 @@
             </div>
             <div class="toolbar">
               <button class="btn btn--amber" id="loadJudging" type="button">Load 15-complaint set</button>
+              <button class="btn btn--ghost btn--dark" id="viewReport" type="button">👁 View report</button>
               <button class="btn btn--green" id="downloadReport" type="button">⬇ Download report</button>
               <button class="btn btn--ghost btn--dark" id="resetAll" type="button">Reset board</button>
             </div>
@@ -830,6 +837,20 @@
       <button class="btn" id="adminLoginSubmit" type="button">Login</button>
     </div>
     <div class="modal-hint">Demo build — staff password: <ADMIN_PASSWORD></div>
+  </div>
+</div>
+
+<!-- REPORT VIEWER -->
+<div class="modal-overlay" id="reportOverlay" data-od-id="report-viewer">
+  <div class="modal-box modal-box--report" role="dialog" aria-modal="true" aria-labelledby="reportTitle">
+    <div class="report-head">
+      <h3 id="reportTitle">Civic intake report</h3>
+      <div class="modal-actions">
+        <button class="btn btn--ghost" id="reportClose" type="button">Close</button>
+        <button class="btn" id="reportDownloadBtn" type="button">⬇ Download</button>
+      </div>
+    </div>
+    <div class="report-body" id="reportBody"></div>
   </div>
 </div>
 
