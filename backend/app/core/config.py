@@ -27,6 +27,11 @@ class Settings:
     MODEL_VISION = os.getenv("MODEL_VISION", "qwen-vl-max")
     MODEL_ASR = os.getenv("MODEL_ASR", "mistralai/voxtral-small-24b-2507")
 
+    # Google reCAPTCHA v2 — optional. If keys are empty, the captcha is skipped
+    # (demo mode); when set, complaint submissions must pass verification.
+    RECAPTCHA_SITE_KEY: str = os.getenv("RECAPTCHA_SITE_KEY", "")
+    RECAPTCHA_SECRET_KEY: str = os.getenv("RECAPTCHA_SECRET_KEY", "")
+
     DB_PATH = Path(os.getenv("NAGARAI_DB", str(BASE_DIR / "data" / "nagarai.db")))
     MEDIA_DIR = Path(os.getenv("NAGARAI_MEDIA", str(BASE_DIR / "data" / "media")))
     CACHE_CSV = Path(os.getenv("NAGARAI_CACHE", str(BASE_DIR / "data" / "api_cache.csv")))

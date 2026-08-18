@@ -679,6 +679,11 @@
           <div class="hint" id="locStatus">Location auto-detects when allowed — or type the area name below.</div>
         </div>
 
+        <div class="field">
+          <div id="captchaBox" class="captcha-box" style="display:none"></div>
+          <div class="hint" id="captchaStatus" style="display:none"></div>
+        </div>
+
         <button class="btn full" id="submitBtn">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>
           <span id="submitBtnTxt">Submit &amp; run AI intake</span>
@@ -840,6 +845,10 @@
     <div class="field">
       <label for="adminPasswordInput">Password</label>
       <input type="password" id="adminPasswordInput" placeholder="••••••••">
+    </div>
+    <div class="field" id="adminCaptchaField">
+      <label for="adminCaptchaInput">Human check: <span id="adminCaptchaQ">—</span></label>
+      <input type="text" id="adminCaptchaInput" placeholder="Answer the sum" autocomplete="off">
     </div>
     <div class="modal-err" id="adminLoginErr"></div>
     <div class="modal-actions">

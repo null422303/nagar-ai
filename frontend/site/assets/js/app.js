@@ -41,6 +41,8 @@
   var DEMO = false;
   var issues = [];
   var catF = "", statF = "", sortF = "priority", areaF = "";
+  var captchaEnabled = false;
+  var captchaWidgetId = null;
   var map = null, markerLayer = null, activeHighlight = null, mapInited = false, mapSizedOnce = false;
   var adminAuthed = false;
   var currentTab = "text";
@@ -371,6 +373,34 @@
     }).catch(function () { /* keep static on failure */ });
   }
 
+  /* Google reCAPTCHA: loads the script only when the server says it's enabled
+     (keys configured). Otherwise the captcha box stays hidden and submissions
+     proceed normally (demo mode). */
+  function loadCaptcha() {
+    var box = $("captchaBox");
+    if (!box) return;
+    if (DEMO) return;
+    j("GET", "/captcha/config").then(function (cfg) {
+      if (!cfg || !cfg.enabled || !cfg.site_key) return;
+      captchaEnabled = true;
+      box.style.display = "block";
+      $("captchaStatus").style.display = "block";
+      $("captchaStatus").textContent = "Human verification — proves you're not a bot.";
+      if (typeof grecaptcha !== "undefined" && grecaptcha.render) {
+        captchaWidgetId = grecaptcha.render(box, { sitekey: cfg.site_key });
+      } else {
+        var s = document.createElement("script");
+        s.src = "https://www.google.com/recaptcha/api.js?onload=onCaptchaLoaded&render=explicit";
+        window.onCaptchaLoaded = function () {
+          if (captchaEnabled && box && box.childElementCount === 0) {
+            captchaWidgetId = grecaptcha.render(box, { sitekey: cfg.site_key });
+          }
+        };
+        document.head.appendChild(s);
+      }
+    }).catch(function () { /* captcha unavailable → stay disabled */ });
+  }
+
   function clusterMetrics(issue) {
     // prefer the server-computed priority/band; fall back to demo formula only in offline mode
     var m = (typeof DEMO !== "undefined" && DEMO) ? demoComputePriority(issue) : null;
@@ -621,14 +651,30 @@
   var ADMIN_PASSWORD = "<ADMIN_PASSWORD>";
   var overlay = $("adminLoginOverlay");
   var pwInput = $("adminPasswordInput");
+  var captchaAnswer = 0;
+  function newAdminCaptcha() {
+    var a = 2 + Math.floor(Math.random() * 8);
+    var b = 2 + Math.floor(Math.random() * 8);
+    captchaAnswer = a + b;
+    $("adminCaptchaQ").textContent = a + " + " + b + " = ?";
+    $("adminCaptchaInput").value = "";
+  }
   function openAdminLogin() {
     $("adminLoginErr").textContent = "";
     pwInput.value = "";
+    newAdminCaptcha();
     overlay.classList.add("show");
     setTimeout(function () { pwInput.focus(); }, 50);
   }
   function closeAdminLogin() { overlay.classList.remove("show"); }
   function attemptAdminLogin() {
+    var human = parseInt($("adminCaptchaInput").value.trim(), 10);
+    if (isNaN(human) || human !== captchaAnswer) {
+      $("adminLoginErr").textContent = "Human check failed — answer the sum correctly.";
+      newAdminCaptcha();
+      $("adminCaptchaInput").focus();
+      return;
+    }
     if (pwInput.value === ADMIN_PASSWORD) {
       adminAuthed = true;
       closeAdminLogin();
@@ -644,6 +690,7 @@
   $("adminLoginSubmit").addEventListener("click", attemptAdminLogin);
   $("adminLoginCancel").addEventListener("click", closeAdminLogin);
   pwInput.addEventListener("keydown", function (e) { if (e.key === "Enter") attemptAdminLogin(); });
+  $("adminCaptchaInput").addEventListener("keydown", function (e) { if (e.key === "Enter") attemptAdminLogin(); });
   overlay.addEventListener("click", function (e) { if (e.target === overlay) closeAdminLogin(); });
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape" && overlay.classList.contains("show")) closeAdminLogin();
@@ -921,6 +968,13 @@
     }
     fd.append("language", micLang.value);
     if (!isNaN(lat) && !isNaN(lng)) { fd.append("lat", lat); fd.append("lng", lng); }
+    if (captchaEnabled) {
+      var tok = (typeof grecaptcha !== "undefined" && captchaWidgetId != null)
+        ? grecaptcha.getResponse(captchaWidgetId) : "";
+      if (!tok) { fail("Please complete the human verification first."); return; }
+      fd.append("captcha_token", tok);
+      if (typeof grecaptcha !== "undefined" && captchaWidgetId != null) grecaptcha.reset(captchaWidgetId);
+    }
     j("POST", "/complaints", fd).then(function (resp) {
       renderResult(resp, raw);
     }).catch(function (e) {
@@ -1316,4 +1370,5 @@
   loadIssues();
   loadCategories();
   loadAreas();
+  loadCaptcha();
 })();

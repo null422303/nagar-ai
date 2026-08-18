@@ -3,11 +3,34 @@ from typing import Optional
 
 from fastapi import APIRouter, UploadFile, File, Form
 
+from app.core.config import settings
 from app.engines import dedup
 from app.models import store
 from app.services import intake
 
 router = APIRouter()
+
+
+@router.post("/captcha/verify")
+async def verify_captcha(token: str = Form(...)):
+    """Verify a Google reCAPTCHA token. When RECAPTCHA_SECRET_KEY is unset,
+    verification always passes (captcha disabled for demo)."""
+    if not settings.RECAPTCHA_SECRET_KEY:
+        return {"success": True, "disabled": True}
+    import httpx
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        r = await client.post("https://www.google.com/recaptcha/api/siteverify", data={
+            "secret": settings.RECAPTCHA_SECRET_KEY,
+            "response": token,
+        })
+    data = r.json()
+    return {"success": bool(data.get("success")), "score": data.get("score")}
+
+
+@router.get("/captcha/config")
+async def captcha_config():
+    """Expose whether reCAPTCHA is enabled + the public site key."""
+    return {"enabled": bool(settings.RECAPTCHA_SITE_KEY), "site_key": settings.RECAPTCHA_SITE_KEY}
 
 
 @router.post("/complaints")
@@ -18,6 +41,7 @@ async def create_complaint(
     lat: Optional[str] = Form(None),
     lng: Optional[str] = Form(None),
     language: Optional[str] = Form(""),
+    captcha_token: Optional[str] = Form(None),
 ):
     image_b64 = base64.b64encode(await image.read()).decode() if image else ""
     audio_b64 = base64.b64encode(await audio.read()).decode() if audio else ""
@@ -26,6 +50,23 @@ async def create_complaint(
     if not (text and text.strip()) and not image_b64 and not audio_b64:
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Nothing to file — add text, a photo, or a voice note.")
+
+    # reCAPTCHA gate (only enforced when configured)
+    if settings.RECAPTCHA_SECRET_KEY:
+        if not captcha_token:
+            raise HTTPException(status_code=400, detail="Human verification required — please complete the captcha.")
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                vr = await client.post("https://www.google.com/recaptcha/api/siteverify", data={
+                    "secret": settings.RECAPTCHA_SECRET_KEY,
+                    "response": captcha_token,
+                })
+            ok = bool(vr.json().get("success"))
+        except Exception:
+            ok = False
+        if not ok:
+            raise HTTPException(status_code=400, detail="Human verification failed — please try again.")
 
     gps = None
     if lat is not None and lat != "" and lng is not None and lng != "":
