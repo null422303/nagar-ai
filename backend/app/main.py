@@ -111,11 +111,16 @@ app.add_middleware(
 
 @app.middleware("http")
 async def vpn_guard(request: Request, call_next):
-    """Block clients behind VPNs/proxies with a 'we don't allow VPN' 404 page.
+    """Block clients behind VPNs/proxies by redirecting them to /vpn-blocked.
     Uses a free lookup (ip-api.com) that is only queried for the first request
-    from each IP (cached 10 min). API callers get a JSON 403; page visitors get
-    the styled 404 page. Localhost and unknown IPs are always allowed through."""
+    from each IP (cached 10 min). Page visitors get redirected to the dedicated
+    'we don't allow VPN' page; API callers get a JSON 403. Localhost and
+    unknown IPs are always allowed through."""
+    from fastapi.responses import RedirectResponse
     from app.services import vpn_detect
+
+    if request.url.path == "/vpn-blocked":
+        return await call_next(request)  # the block page itself is always served
 
     check = await vpn_detect.check_client(request)
     if check and check.get("block"):
@@ -125,7 +130,7 @@ async def vpn_guard(request: Request, call_next):
                 "detail": "We don't allow VPN connections. Please disable your VPN and retry.",
                 "reason": check.get("reason"),
             })
-        return HTMLResponse(content=_VPN_BLOCK_PAGE, status_code=404)
+        return RedirectResponse("/vpn-blocked", status_code=302)
     return await call_next(request)
 
 # The production website is the redesigned Ward Control Room site
@@ -134,6 +139,12 @@ _SITE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "sit
 
 # API routes first so they win over the SPA catch-all
 app.include_router(router, prefix="/api")
+
+
+@app.get("/vpn-blocked", include_in_schema=False)
+async def vpn_blocked_page():
+    """Dedicated 'we don't allow VPN' page — blocked clients are redirected here."""
+    return HTMLResponse(content=_VPN_BLOCK_PAGE, status_code=200)
 
 
 @app.on_event("startup")
