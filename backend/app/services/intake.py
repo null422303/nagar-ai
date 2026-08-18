@@ -16,8 +16,14 @@ EXTRACT_SYSTEM = (
     "category — use ONE of the standard keys (pothole|garbage|broken_streetlight|waterlogging|other) "
     "if it clearly fits; otherwise CREATE A NEW concise snake_case category key for an emerging issue "
     "(e.g. 'open_manhole', 'stray_cattle', 'electric_wire'). "
+    "is_spam — true ONLY if the message is clearly unrelated to civic issues: personal disputes, "
+    "advertising/promotions, spam/scams, complaints about neighbours/private property, politics, "
+    "or anything a municipal corporation cannot act on. Otherwise false. "
+    "When a complaint is vague or ambiguous (cannot be classified into any concrete issue) use "
+    "category 'other'. "
     "Also give: category_label (human-friendly title, e.g. 'Open Manhole'), "
     "category_color (a vivid hex color you pick for the new category, only when creating one), "
+    "tags (2-4 short snake_case keywords describing the issue, e.g. ['asphalt','crater','two_wheeler']), "
     "severity 1-5, "
     "location_text (a short place name / landmark / street in Chennai), "
     "clean_summary (ONE clean English line that an official would understand), "
@@ -29,7 +35,11 @@ VISION_SYSTEM = (
     "You analyze civic-problem photos from India. Determine: category — use ONE of the standard keys "
     "(pothole|garbage|broken_streetlight|waterlogging|other) if it clearly fits; otherwise CREATE A NEW "
     "concise snake_case category key (e.g. 'open_manhole', 'stray_cattle'). "
+    "is_spam — true ONLY if the photo is clearly not a civic issue (advertisement, personal photo, "
+    "selfie, food, random object, unrelated scene). Otherwise false. "
+    "When the photo is ambiguous/unclear use category 'other'. "
     "Also give category_label (human-friendly title), category_color (vivid hex you pick when creating one), "
+    "tags (2-4 short snake_case keywords, e.g. ['pothole','water','asphalt']), "
     "severity 1-5 based on size/extent/danger, "
     "extent (one short phrase like 'large pothole covering most of lane'), "
     "location_text (a short place name / landmark / street sign visible in the photo, in Chennai — "
@@ -54,6 +64,7 @@ _DEFAULT_CAT_COLORS = {
     "broken_streetlight": "#F2B705",
     "waterlogging": "#2B7FF5",
     "other": "#7A877A",
+    "spam": "#8B0000",
 }
 
 # Indic scripts: Tamil (0B80-0BFF), Devanagari (0900-097F), Bengali, Telugu, etc.
@@ -126,6 +137,9 @@ async def _extract_text(text: str) -> ExtractedComplaint:
     out = await ai.chat(
         f"Complaint text:\n{text}\n\nExtract.", system=EXTRACT_SYSTEM, json_mode=True, max_tokens=500)
     d = _parse_json(out)
+    tags = d.get("tags") or []
+    if not isinstance(tags, list):
+        tags = []
     return ExtractedComplaint(
         category=d.get("category", "other"),
         severity=int(d.get("severity", 3)),
@@ -134,6 +148,8 @@ async def _extract_text(text: str) -> ExtractedComplaint:
         urgent_hint=bool(d.get("urgent_hint", False)),
         category_label=d.get("category_label", ""),
         category_color=d.get("category_color", ""),
+        tags=tags,
+        is_spam=bool(d.get("is_spam", False)),
     )
 
 
@@ -142,6 +158,9 @@ async def _analyze_photo(image_b64: str) -> VisionResult:
     out = await ai.chat("Analyze this photo.", system=VISION_SYSTEM, json_mode=True,
                         max_tokens=400, images=[data_uri])
     d = _parse_json(out)
+    tags = d.get("tags") or []
+    if not isinstance(tags, list):
+        tags = []
     return VisionResult(
         category=d.get("category", "other"),
         severity=int(d.get("severity", 3)),
@@ -150,6 +169,8 @@ async def _analyze_photo(image_b64: str) -> VisionResult:
         location_text=d.get("location_text", ""),
         category_label=d.get("category_label", ""),
         category_color=d.get("category_color", ""),
+        tags=tags,
+        is_spam=bool(d.get("is_spam", False)),
     )
 
 
@@ -228,6 +249,10 @@ async def process_submission(text: str = "", image_b64: str = "", audio_b64: str
 
     # ---- merge policy: max confidence per field ----
     category = extracted.category if extracted else (vision.category if vision else "other")
+    # Spam wins if either modality flags it — unrelated content is quarantined.
+    is_spam = bool((extracted and extracted.is_spam) or (vision and vision.is_spam))
+    if is_spam:
+        category = "spam"
     severity = vision.severity if (vision and vision.severity >= 4) else (extracted.severity if extracted else 3)
     severity_reason = []
     if vision:
@@ -235,6 +260,21 @@ async def process_submission(text: str = "", image_b64: str = "", audio_b64: str
     if extracted:
         severity_reason.append(f"text: {extracted.clean_summary}")
     location_text = extracted.location_text if extracted else (vision.location_text if vision else "")
+
+    # ---- tags: merged union, up to 5 ----
+    tags = []
+    if extracted and extracted.tags:
+        tags.extend(extracted.tags)
+    if vision and vision.tags:
+        tags.extend(vision.tags)
+    seen = set()
+    dedup_tags = []
+    for t in tags:
+        t = str(t).strip().lower().replace(" ", "_")
+        if t and t not in seen:
+            seen.add(t)
+            dedup_tags.append(t)
+    tags = dedup_tags[:5]
 
     # ---- dynamic categories: label + color (AI-picked for new issue types) ----
     category_label = ""
@@ -247,6 +287,9 @@ async def process_submission(text: str = "", image_b64: str = "", audio_b64: str
         category_color = extracted.category_color
     elif vision and vision.category_color:
         category_color = vision.category_color
+    if category == "spam":
+        category_label = "Spam / Unrelated"
+        category_color = "#8B0000"
     # fallback label/color for standard categories
     if not category_label:
         category_label = _DEFAULT_CAT_LABELS.get(category, category.replace("_", " ").title())
@@ -292,6 +335,8 @@ async def process_submission(text: str = "", image_b64: str = "", audio_b64: str
         "category_conf": 1.0,
         "category_label": category_label,
         "category_color": category_color,
+        "tags": tags,
+        "is_spam": is_spam,
         "severity": severity,
         "severity_reason": "; ".join(severity_reason),
         "summary": summary,

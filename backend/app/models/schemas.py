@@ -10,6 +10,8 @@ class VisionResult(BaseModel):
     location_text: str = ""
     category_label: Optional[str] = None
     category_color: Optional[str] = None
+    tags: List[str] = []
+    is_spam: bool = False
 
 
 class ExtractedComplaint(BaseModel):
@@ -20,6 +22,8 @@ class ExtractedComplaint(BaseModel):
     urgent_hint: bool = False
     category_label: Optional[str] = None
     category_color: Optional[str] = None
+    tags: List[str] = []
+    is_spam: bool = False
 
 
 class ComplaintIn(BaseModel):

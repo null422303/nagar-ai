@@ -288,12 +288,36 @@
     apiIssues().then(function (data) {
       issues = data || [];
       refresh();
+      loadCategories();
     }).catch(function () {
       setDemo(true);
       issues = demoLoadStore();
       toast("Server unreachable — switched to offline demo data.");
       refresh();
     });
+  }
+
+  /* Dynamic category dropdown: populate from /api/categories so AI-created types
+     (open_manhole, stray_cattle, …) and spam appear as filter options. */
+  function loadCategories() {
+    if (DEMO) return;
+    var sel = $("fCategory");
+    if (!sel) return;
+    var current = sel.value;
+    j("GET", "/categories").then(function (cats) {
+      if (!cats || !cats.length) return;
+      var kept = ['<option value="">All categories</option>'];
+      cats.forEach(function (c) {
+        var key = c.key === "streetlight" ? "streetlight" : c.key; // keep UI alias
+        kept.push('<option value="' + esc(key) + '"' + (current === key ? " selected" : "") + ">" + esc(c.label) + "</option>");
+      });
+      // always keep the four known ones even if count is 0
+      ["pothole", "garbage", "broken_streetlight", "waterlogging", "spam"].forEach(function (k) {
+        var present = cats.some(function (c) { return (c.key === k); });
+        if (!present && k !== "spam") return; // only enforce known types if missing entirely
+      });
+      sel.innerHTML = kept.join("");
+    }).catch(function () { /* keep static options on failure */ });
   }
 
   function clusterMetrics(issue) {
@@ -986,6 +1010,45 @@
     }).then(finish);
   });
 
+  /* ================= DOWNLOAD REPORT ================= */
+  var reportBtn = $("downloadReport");
+  if (reportBtn) {
+    reportBtn.addEventListener("click", function () {
+      var fmt = "markdown"; // also available: csv / json via ?fmt=
+      var btn = reportBtn;
+      btn.disabled = true;
+      var orig = btn.textContent;
+      btn.textContent = "Generating...";
+      if (DEMO) {
+        btn.textContent = orig; btn.disabled = false;
+        toast("Report is only available with the live server.", true);
+        return;
+      }
+      fetch(API + "/report?fmt=" + fmt).then(function (r) {
+        if (!r.ok) throw new Error(r.status + " " + r.statusText);
+        return r.text();
+      }).then(function (text) {
+        var blob = new Blob([text], { type: "text/markdown" });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        var d = new Date();
+        var pad = function (n) { return n < 10 ? "0" + n : n; };
+        a.href = url;
+        a.download = "nagarai-report-" + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + ".md";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+        toast("Report downloaded — complaints CSV, area-segregated.");
+      }).catch(function (e) {
+        toast("Report error: " + e.message, true);
+      }).then(function () {
+        btn.disabled = false;
+        btn.textContent = orig;
+      });
+    });
+  }
+
   var searchQ = "";
   var searchTimer = null;
   var searchEl = $("fSearch");
@@ -1078,4 +1141,5 @@
   tickClock();
   setInterval(tickClock, 1000);
   loadIssues();
+  loadCategories();
 })();

@@ -90,7 +90,8 @@ which also gives HTTPS so mic + geolocation work. See [ARCHITECTURE.md](ARCHITEC
 
 ## Features
 - **Multimodal intake** — live voice (browser Web Speech API, 9 Indian languages, native script, English default), photo (vision-only classification — no text needed, EXIF GPS + visible signage auto-locate), text (any mix) → one structured complaint
-- **Dynamic AI categories** — creates a new category + label + colour when an issue doesn't fit the standard four
+- **Dynamic AI categories** — creates a new category + label + colour + tags when an issue doesn't fit the standard four; ambiguity → `other`, unrelated content → `spam` (quarantined, never clustered). Dropdown lists all live categories.
+- **Extensive CSV report** — admin "Download report" button generates a markdown report from the complaints CSV: totals, category/severity/channel/department breakdowns, top tags, and a full **area-segregated** breakdown with per-location issue tables.
 - **Dedup** — canonicalize-then-embed + geo + vision; merges duplicates with an explainable "why merged" audit trail
 - **Explainable priority (PRT)** — severity-band formula (band·P·T·L), every term visible on cards
 - **Tickets** — every complaint has an ID; status chain Open → Assigned → In Progress → Resolved

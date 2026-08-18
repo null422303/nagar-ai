@@ -24,7 +24,8 @@ _LOCK = threading.RLock()
 
 COMPLAINT_FIELDS = [
     "id", "created_at", "channel", "language", "transcript", "transcript_en", "text_raw",
-    "category", "category_conf", "category_label", "category_color", "severity", "severity_reason", "summary",
+    "category", "category_conf", "category_label", "category_color", "tags", "is_spam",
+    "severity", "severity_reason", "summary",
     "location_text", "lat", "lng", "loc_source", "loc_confidence",
     "vision_fingerprint", "fingerprint_embed", "vision_raw", "asr_confidence",
     "status", "dept", "sla_deadline", "notify_link", "issue_id",
@@ -32,7 +33,7 @@ COMPLAINT_FIELDS = [
 ]
 
 ISSUE_FIELDS = [
-    "id", "created_at", "category", "category_label", "category_color", "severity", "severity_reason", "summary",
+    "id", "created_at", "category", "category_label", "category_color", "tags", "severity", "severity_reason", "summary",
     "centroid_lat", "centroid_lng", "centroid_embed", "centroid_vision",
     "affected_count", "priority_score", "priority_reason", "status", "dept",
     "sla_deadline", "school_hospital_prox", "days_pending",
@@ -309,6 +310,143 @@ def recent_complaints(n: int = 10, category: Optional[str] = None) -> list:
     if category:
         rows = [r for r in rows if r.get("category") == category]
     return rows[:n]
+
+
+def distinct_categories() -> list:
+    """All distinct categories seen across complaints/issues, with label + color.
+    Used to populate the dynamic filter dropdown."""
+    cats = {}
+    for r in _read("complaints"):
+        c = r.get("category") or "other"
+        if c not in cats:
+            cats[c] = {"key": c, "label": r.get("category_label") or c.replace("_", " ").title(),
+                       "color": r.get("category_color") or "#7A877A", "count": 0}
+        cats[c]["count"] += 1
+    for r in _read("issues"):
+        c = r.get("category") or "other"
+        if c not in cats:
+            cats[c] = {"key": c, "label": r.get("category_label") or c.replace("_", " ").title(),
+                       "color": r.get("category_color") or "#7A877A", "count": 0}
+    order = ["pothole", "garbage", "broken_streetlight", "waterlogging", "other", "spam"]
+    items = list(cats.values())
+    items.sort(key=lambda x: (order.index(x["key"]) if x["key"] in order else 99, x["key"]))
+    return items
+
+
+def generate_report() -> dict:
+    """Extensive civic report from the complaints CSV, segregated by area."""
+    import datetime as _dt
+    rows = _read("complaints")
+    total = len(rows)
+
+    def _area(r):
+        loc = (r.get("location_text") or "").strip()
+        if loc:
+            return loc.split(",")[0].strip() or "Unspecified"
+        if r.get("loc_source") in ("gps", "photo_exif"):
+            return "GPS / EXIF located"
+        return "Unspecified"
+
+    def _sev(r):
+        try:
+            return int(r.get("severity") or 0)
+        except Exception:
+            return 0
+
+    def _days(r):
+        try:
+            d = _dt.datetime.strptime(r.get("created_at") or "", "%Y-%m-%d %H:%M:%S")
+            return max(0.0, (_dt.datetime.utcnow() - d).total_seconds() / 86400.0)
+        except Exception:
+            return 0.0
+
+    by_category = {}
+    by_status = {}
+    by_channel = {}
+    by_area = {}
+    by_severity = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+    by_department = {}
+    tag_cloud = {}
+    urgent = 0
+    spam = 0
+    unresolved = 0
+    resolved = 0
+    total_affected = 0
+
+    for r in rows:
+        cat = r.get("category") or "other"
+        st = r.get("status") or "open"
+        ch = r.get("channel") or "text"
+        area = _area(r)
+        sev = _sev(r)
+        dept = (r.get("dept") or "").strip() or "Pending routing"
+
+        by_category[cat] = by_category.get(cat, 0) + 1
+        by_status[st] = by_status.get(st, 0) + 1
+        by_channel[ch] = by_channel.get(ch, 0) + 1
+        by_severity[sev] = by_severity.get(sev, 0) + 1
+        by_department[dept] = by_department.get(dept, 0) + 1
+
+        if area not in by_area:
+            by_area[area] = {"count": 0, "open": 0, "resolved": 0, "categories": {}, "avg_severity": 0, "sev_sum": 0, "severity_sum": 0, "issues": []}
+        a = by_area[area]
+        a["count"] += 1
+        a["sev_sum"] += sev
+        a["severity_sum"] += sev
+        a["categories"][cat] = a["categories"].get(cat, 0) + 1
+        if st == "resolved":
+            a["resolved"] += 1
+        else:
+            a["open"] += 1
+        a["issues"].append({
+            "id": r.get("id"), "category": cat, "category_label": r.get("category_label") or cat,
+            "severity": sev, "status": st, "summary": (r.get("summary") or "")[:140],
+            "location_text": r.get("location_text") or "", "days_open": round(_days(r), 1),
+            "created_at": r.get("created_at") or "", "is_spam": bool(r.get("is_spam")) or cat == "spam",
+        })
+
+        # tags from the AI (CSV stores them JSON-encoded)
+        raw_tags = r.get("tags") or ""
+        try:
+            tl = json.loads(raw_tags) if isinstance(raw_tags, str) and raw_tags.strip() else (raw_tags if isinstance(raw_tags, list) else [])
+        except Exception:
+            tl = []
+        for t in tl:
+            tag_cloud[str(t)] = tag_cloud.get(str(t), 0) + 1
+
+        if bool(r.get("is_spam")) or cat == "spam":
+            spam += 1
+        if r.get("urgent_hint"):
+            urgent += 1
+        if st == "resolved":
+            resolved += 1
+        else:
+            unresolved += 1
+        total_affected += 1
+
+    # finalize area averages + cap issue lists
+    for area, a in by_area.items():
+        a["avg_severity"] = round(a["severity_sum"] / a["count"], 2) if a["count"] else 0
+        a["issues"] = sorted(a["issues"], key=lambda x: x.get("days_open") or 0, reverse=True)[:20]
+
+    return {
+        "generated_at": _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        "totals": {
+            "complaints": total,
+            "resolved": resolved,
+            "unresolved": unresolved,
+            "spam": spam,
+            "urgent": urgent,
+            "affected": total_affected,
+        },
+        "by_category": by_category,
+        "by_status": by_status,
+        "by_channel": by_channel,
+        "by_severity": by_severity,
+        "by_department": by_department,
+        "tag_cloud": dict(sorted(tag_cloud.items(), key=lambda x: -x[1])[:30]),
+        "by_area": by_area,
+    }
 
 
 # ---------------- memberships ----------------

@@ -215,3 +215,88 @@ async def get_stats():
 async def get_recent(n: int = 10, category: Optional[str] = None):
     """Latest complaints (newest first), optionally filtered by category."""
     return store.recent_complaints(n=n, category=category)
+
+
+@router.get("/categories")
+async def get_categories():
+    """All distinct categories (standard + AI-created + spam) with label/color/count.
+    Powers the dynamic filter dropdown."""
+    return store.distinct_categories()
+
+
+@router.get("/report")
+async def get_report(fmt: str = "json"):
+    """Extensive civic report generated from the complaints CSV, segregated by area.
+    fmt=json → structured dict; fmt=markdown → printable markdown; fmt=csv → flat CSV."""
+    from fastapi.responses import PlainTextResponse
+    report = store.generate_report()
+    if fmt == "markdown":
+        md = _render_report_markdown(report)
+        return PlainTextResponse(md, media_type="text/markdown")
+    if fmt == "csv":
+        return PlainTextResponse(_render_report_csv(report), media_type="text/csv")
+    return report
+
+
+def _render_report_markdown(r: dict) -> str:
+    t = r["totals"]
+    lines = [
+        "# NagarAI — Civic Intake Report",
+        "",
+        f"Generated: {r['generated_at']}  ·  UTC",
+        "",
+        "## Summary",
+        "",
+        f"- **Total complaints:** {t['complaints']}",
+        f"- **Resolved:** {t['resolved']}",
+        f"- **Unresolved:** {t['unresolved']}",
+        f"- **Spam / unrelated quarantined:** {t['spam']}",
+        f"- **Urgent hazards flagged:** {t['urgent']}",
+        "",
+        "## By Category",
+        "",
+        "| Category | Count |",
+        "|---|---|",
+    ]
+    for c, n in sorted(r["by_category"].items(), key=lambda x: -x[1]):
+        lines.append(f"| {c.replace('_', ' ')} | {n} |")
+    lines += ["", "## By Severity", "", "| Severity | Count |", "|---|---|"]
+    for s in range(5, 0, -1):
+        lines.append(f"| {s} | {r['by_severity'].get(s, 0)} |")
+    lines += ["", "## By Channel", "", "| Channel | Count |", "|---|---|"]
+    for c, n in sorted(r["by_channel"].items(), key=lambda x: -x[1]):
+        lines.append(f"| {c} | {n} |")
+    lines += ["", "## By Department", "", "| Department | Count |", "|---|---|"]
+    for d, n in sorted(r["by_department"].items(), key=lambda x: -x[1]):
+        lines.append(f"| {d} | {n} |")
+    if r.get("tag_cloud"):
+        lines += ["", "## Top Tags", "", "| Tag | Mentions |", "|---|---|"]
+        for tag, n in list(r["tag_cloud"].items())[:15]:
+            lines.append(f"| {tag} | {n} |")
+    lines += ["", "## Area Breakdown", ""]
+    for area, a in sorted(r["by_area"].items(), key=lambda x: -x[1]["count"]):
+        lines.append(f"### {area}")
+        lines.append("")
+        lines.append(f"- Complaints: **{a['count']}** · Open: {a['open']} · Resolved: {a['resolved']} · Avg severity: {a['avg_severity']}")
+        lines.append("")
+        lines.append("| # | Category | Severity | Status | Days | Summary |")
+        lines.append("|---|---|---|---|---|---|")
+        for it in a["issues"]:
+            lines.append(f"| {it['id']} | {it['category_label']} | {it['severity']} | {it['status']} | {it['days_open']} | {it['summary']} |")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _render_report_csv(r: dict) -> str:
+    import io
+    buf = io.StringIO()
+    buf.write("id,category,severity,status,area,days_open,is_spam,summary,created_at\n")
+    for area, a in r["by_area"].items():
+        for it in a["issues"]:
+            buf.write(",".join(str(v) for v in [
+                it["id"], it["category"], it["severity"], it["status"], area,
+                it["days_open"], 1 if it["is_spam"] else 0,
+                '"' + str(it["summary"]).replace('"', '""') + '"',
+                it["created_at"],
+            ]) + "\n")
+    return buf.getvalue()

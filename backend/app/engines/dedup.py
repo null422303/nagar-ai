@@ -227,7 +227,20 @@ async def _has_proximity_poi(issue_id: int, lat: Optional[float], lng: Optional[
 
 async def ingest_complaint(complaint: dict) -> dict:
     """Full pipeline: fingerprint -> embed -> cluster -> priority.
-    The embed call and the Overpass POI check run CONCURRENTLY."""
+    The embed call and the Overpass POI check run CONCURRENTLY.
+
+    Spam / unrelated submissions are stored as complaints (category=spam) but are
+    quarantined — they never create or join an issue cluster or a map marker."""
+    if complaint.get("is_spam") or complaint.get("category") == "spam":
+        row = {k: complaint.get(k) for k in store.COMPLAINT_FIELDS if k in complaint}
+        row["vision_raw"] = store.json_dumps(complaint.get("vision_raw") or {})
+        row["photo_meta"] = store.json_dumps(complaint.get("photo_meta") or {})
+        row["fingerprint_text"] = complaint.get("text_raw") or complaint.get("transcript", "")
+        complaint_id = store.insert_complaint(row)
+        store.update_complaint(complaint_id, issue_id="", notify_link=f"/status/{complaint_id}")
+        return {"complaint_id": complaint_id, "issue_id": None, "scores": None,
+                "merged": False, "spam": True}
+
     fp = build_fingerprint(
         complaint.get("text_raw") or complaint.get("transcript", ""),
         complaint.get("category", "other"),
@@ -277,6 +290,7 @@ async def ingest_complaint(complaint: dict) -> dict:
         "category": complaint.get("category", "other"),
         "category_label": complaint.get("category_label", ""),
         "category_color": complaint.get("category_color", ""),
+        "tags": store.json_dumps(complaint.get("tags") or []),
         "severity": complaint.get("severity", 3),
         "severity_reason": complaint.get("severity_reason", ""),
         "summary": complaint.get("summary", ""),
