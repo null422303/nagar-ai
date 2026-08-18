@@ -1,0 +1,222 @@
+{
+  "results": [
+    {
+      "id": 1,
+      "truth": "A",
+      "issue_id": 1,
+      "merged": true,
+      "category": "pothole",
+      "scores": {
+        "text": 1.0,
+        "geo": 1.0,
+        "vision": 0.0,
+        "sim": 1.0
+      },
+      "dt": 0.5
+    },
+    {
+      "id": 2,
+      "truth": "B",
+      "issue_id": 2,
+      "merged": true,
+      "category": "garbage",
+      "scores": {
+        "text": 1.0,
+        "geo": 1.0,
+        "vision": 0.0,
+        "sim": 1.0
+      },
+      "dt": 10.3
+    },
+    {
+      "id": 3,
+      "truth": "C",
+      "issue_id": 3,
+      "merged": true,
+      "category": "broken_streetlight",
+      "scores": {
+        "text": 1.0,
+        "geo": 1.0,
+        "vision": 0.0,
+        "sim": 1.0
+      },
+      "dt": 0.0
+    },
+    {
+      "id": 4,
+      "truth": "A",
+      "issue_id": 1,
+      "merged": true,
+      "category": "pothole",
+      "scores": {
+        "text": 0.918,
+        "geo": 0.875,
+        "vision": 0.0,
+        "sim": 0.903
+      },
+      "dt": 0.0
+    },
+    {
+      "id": 5,
+      "truth": "D",
+      "issue_id": 4,
+      "merged": true,
+      "category": "waterlogging",
+      "scores": {
+        "text": 1.0,
+        "geo": 1.0,
+        "vision": 0.0,
+        "sim": 1.0
+      },
+      "dt": 10.6
+    },
+    {
+      "id": 6,
+      "truth": "B",
+      "issue_id": 2,
+      "merged": true,
+      "category": "garbage",
+      "scores": {
+        "text": 0.787,
+        "geo": 0.806,
+        "vision": 0.0,
+        "sim": 0.794
+      },
+      "dt": 1.8
+    },
+    {
+      "id": 7,
+      "truth": "C",
+      "issue_id": 3,
+      "merged": true,
+      "category": "broken_streetlight",
+      "scores": {
+        "text": 0.924,
+        "geo": 0.61,
+        "vision": 0.0,
+        "sim": 0.813
+      },
+      "dt": 0.0
+    },
+    {
+      "id": 8,
+      "truth": "A",
+      "issue_id": 1,
+      "merged": true,
+      "category": "pothole",
+      "scores": {
+        "text": 0.702,
+        "geo": 0.562,
+        "vision": 0.0,
+        "sim": 0.653
+      },
+      "dt": 0.1
+    },
+    {
+      "id": 9,
+      "truth": "B",
+      "issue_id": 2,
+      "merged": true,
+      "category": "garbage",
+      "scores": {
+        "text": 0.889,
+        "geo": 0.621,
+        "vision": 0.0,
+        "sim": 0.794
+      },
+      "dt": 6.1
+    },
+    {
+      "id": 10,
+      "truth": "D",
+      "issue_id": 4,
+      "merged": true,
+      "category": "waterlogging",
+      "scores": {
+        "text": 0.95,
+        "geo": 0.875,
+        "vision": 0.0,
+        "sim": 0.923
+      },
+      "dt": 6.6
+    },
+    {
+      "id": 11,
+      "truth": "C",
+      "issue_id": 3,
+      "merged": true,
+      "category": "broken_streetlight",
+      "scores": {
+        "text": 0.88,
+        "geo": 0.875,
+        "vision": 0.0,
+        "sim": 0.878
+      },
+      "dt": 0.1
+    },
+    {
+      "id": 12,
+      "truth": "A",
+      "issue_id": 1,
+      "merged": true,
+      "category": "pothole",
+      "scores": {
+        "text": 0.951,
+        "geo": 0.919,
+        "vision": 0.0,
+        "sim": 0.939
+      },
+      "dt": 0.1
+    },
+    {
+      "id": 13,
+      "truth": "E",
+      "issue_id": 5,
+      "merged": true,
+      "category": "pothole",
+      "scores": {
+        "text": 1.0,
+        "geo": 1.0,
+        "vision": 0.0,
+        "sim": 1.0
+      },
+      "dt": 0.1
+    },
+    {
+      "id": 14,
+      "truth": "C",
+      "issue_id": 3,
+      "merged": true,
+      "category": "broken_streetlight",
+      "scores": {
+        "text": 0.948,
+        "geo": 0.57,
+        "vision": 0.0,
+        "sim": 0.814
+      },
+      "dt": 0.1
+    },
+    {
+      "id": 15,
+      "truth": "E",
+      "issue_id": 5,
+      "merged": true,
+      "category": "pothole",
+      "scores": {
+        "text": 0.867,
+        "geo": 0.919,
+        "vision": 0.0,
+        "sim": 0.885
+      },
+      "dt": 0.1
+    }
+  ],
+  "metrics": {
+    "purity": 1.0,
+    "coverage": 1.0,
+    "merge_accuracy": 1.0,
+    "category_accuracy": 1.0,
+    "num_issues": 5,
+    "expected_issues": 5
+  }
+}

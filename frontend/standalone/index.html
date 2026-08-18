@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NAGAR AI — Ward Control Room</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Teko:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#18150f;
+    --paper:#e7e1ce;
+    --paper-dim:#dcd5bd;
+    --marigold:#e8a93a;
+    --marigold-dk:#b9822a;
+    --signal-red:#b23a2e;
+    --route-green:#3f6b4a;
+    --canal:#3e5c66;
+    --line:#c9c0a2;
+    --card:#f2ede0;
+    font-size:16px;
+  }
+  *{box-sizing:border-box;}
+  html{ height:100%; }
+  body{
+    margin:0;
+    background:var(--ink);
+    color:var(--paper);
+    font-family:'IBM Plex Sans',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100%;
+  }
+  .disp{font-family:'Teko',sans-serif; font-weight:600; letter-spacing:.01em;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+
+  /* header */
+  .hazard{
+    height:8px;
+    background:repeating-linear-gradient(135deg,var(--marigold) 0 18px, var(--ink) 18px 36px);
+  }
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 28px; border-bottom:1px solid #33301f;
+    background:linear-gradient(180deg,#1c1912,#18150f);
+  }
+  header .brand{display:flex; align-items:baseline; gap:12px;}
+  header h1{font-size:2.4rem; margin:0; color:var(--marigold); line-height:1;}
+  header .tag{font-size:.72rem; letter-spacing:.14em; text-transform:uppercase; color:#9c927a;}
+  header .stat{font-size:.75rem; text-align:right; color:#9c927a;}
+  header .stat b{color:var(--paper); font-size:1rem; font-family:'IBM Plex Mono',monospace;}
+
+  /* role / view switch */
+  .view-bar{background:#141210; border-bottom:1px solid #33301f; padding:10px 28px; display:flex; align-items:center; justify-content:center; gap:14px; flex-wrap:wrap;}
+  .view-switch{display:flex; gap:4px; background:#1c1912; padding:4px; border-radius:4px; border:1px solid #33301f;}
+  .view-switch button{padding:9px 20px; border:none; background:transparent; color:#9c927a; font-family:'IBM Plex Sans',sans-serif; font-weight:600; font-size:.8rem; cursor:pointer; border-radius:2px; letter-spacing:.02em; display:flex; align-items:center; gap:7px;}
+  .view-switch button.active{background:var(--marigold); color:var(--ink);}
+  .view-note{font-size:.68rem; color:#665f47; letter-spacing:.03em;}
+
+  main{padding:22px 28px 60px; max-width:1440px; margin:0 auto;}
+
+  .grid{display:grid; grid-template-columns:360px 1fr; gap:22px;}
+  @media (max-width:980px){ .grid{grid-template-columns:1fr;} }
+  body[data-view="citizen"] .grid{grid-template-columns:1fr; max-width:600px; margin:0 auto;}
+  body[data-view="citizen"] #adminView{display:none;}
+  body[data-view="admin"] #citizenView{display:none;}
+  body[data-view="admin"] .grid{grid-template-columns:1fr;}
+  body[data-view="status"] #citizenView{display:none;}
+  body[data-view="status"] #adminView{display:none;}
+  body[data-view="status"] .grid{grid-template-columns:1fr; max-width:600px; margin:0 auto;}
+  #statusView{display:none;}
+  body[data-view="status"] #statusView{display:block;}
+
+  /* admin layout: left column = cards/formula/judging, right column = map alone as a fixed rectangle */
+  .admin-grid{display:grid; grid-template-columns:1fr 420px; gap:22px; align-items:start;}
+  .admin-left{min-width:0;}
+  .admin-right{position:sticky; top:16px;}
+  @media (max-width:1180px){
+    .admin-grid{grid-template-columns:1fr;}
+    .admin-right{position:static;}
+  }
+
+  /* intake card - receipt stub */
+  .receipt{
+    background:var(--card); color:var(--ink); border-radius:2px;
+    position:relative; padding:20px 20px 24px;
+    box-shadow:0 10px 24px rgba(0,0,0,.35);
+  }
+  .receipt::before, .receipt::after{
+    content:""; position:absolute; left:0; right:0; height:14px;
+    background-image:radial-gradient(circle at 10px 7px, var(--ink) 6px, transparent 7px);
+    background-size:20px 14px; background-repeat:repeat-x;
+  }
+  .receipt::before{top:-7px;}
+  .receipt::after{bottom:-7px;}
+  .receipt h2{font-family:'Teko',sans-serif; font-size:1.7rem; margin:2px 0 2px; color:var(--signal-red); letter-spacing:.02em;}
+  .receipt .sub{font-size:.72rem; color:#665f47; margin-bottom:14px; text-transform:uppercase; letter-spacing:.08em;}
+
+  .tabs{display:flex; gap:6px; margin-bottom:14px;}
+  .tabs button{
+    flex:1; padding:8px 4px; border:1px solid var(--line); background:transparent;
+    color:#665f47; font-family:'IBM Plex Sans',sans-serif; font-size:.78rem; font-weight:600;
+    cursor:pointer; border-radius:2px;
+  }
+  .tabs button.active{background:var(--ink); color:var(--marigold); border-color:var(--ink);}
+
+  .field{margin-bottom:12px;}
+  .field label{display:block; font-size:.7rem; text-transform:uppercase; letter-spacing:.08em; color:#665f47; margin-bottom:5px;}
+  textarea, input[type=text], select, input[type=number]{
+    width:100%; padding:9px 10px; border:1px solid var(--line); background:#fbf9f2;
+    color:var(--ink); font-family:'IBM Plex Sans',sans-serif; font-size:.88rem; border-radius:2px;
+  }
+  textarea{min-height:78px; resize:vertical;}
+  .hint{font-size:.68rem; color:#8a826a; margin-top:4px; line-height:1.4;}
+  .file-drop{
+    border:1.5px dashed var(--line); border-radius:2px; padding:14px; text-align:center;
+    font-size:.78rem; color:#665f47; cursor:pointer; background:#fbf9f2;
+  }
+  .file-drop img{max-width:100%; max-height:120px; margin-top:8px; border-radius:2px;}
+  .locrow{display:flex; gap:8px;}
+  .locrow input{flex:1;}
+  .mic-row{display:flex; gap:8px; align-items:center;}
+  .mic-row select{width:auto; flex-shrink:0;}
+  #micBtn.recording{background:var(--marigold); color:var(--ink);}
+  .mic-status{font-size:.72rem; color:#665f47; margin-top:6px; min-height:16px; line-height:1.4;}
+  .mic-dot{display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--signal-red); margin-right:6px; animation:blink 1s infinite;}
+  @keyframes blink{0%,100%{opacity:1;}50%{opacity:.15;}}
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    padding:10px 16px; background:var(--signal-red); color:#f2ede0; border:none;
+    font-family:'IBM Plex Sans',sans-serif; font-weight:600; font-size:.85rem;
+    cursor:pointer; border-radius:2px; letter-spacing:.02em;
+  }
+  .btn.full{width:100%;}
+  .btn.ghost{background:transparent; border:1px solid var(--line); color:var(--ink);}
+  .btn.marigold{background:var(--marigold); color:var(--ink);}
+  .btn.green{background:var(--route-green); color:#f2ede0;}
+  .btn:disabled{opacity:.5; cursor:not-allowed;}
+  .btn small{font-size:.65rem; opacity:.8;}
+
+  .stampbox{margin-top:14px; padding:10px; background:#f7f4e9; border:1px dashed var(--line); font-size:.78rem; display:none;}
+  .stampbox.show{display:block;}
+  .stampbox .row{display:flex; justify-content:space-between; margin-bottom:3px;}
+  .stampbox .row b{color:var(--signal-red);}
+
+  .log{margin-top:16px;}
+  .log h3{font-size:.7rem; text-transform:uppercase; letter-spacing:.1em; color:#665f47; margin:0 0 6px;}
+  .log-item{font-size:.72rem; border-left:2px solid var(--marigold-dk); padding:4px 8px; margin-bottom:5px; background:#fbf9f2;}
+
+  /* dashboard */
+  .panel{
+    background:#1f1c14; border:1px solid #33301f; border-radius:3px; padding:16px 18px; margin-bottom:18px;
+  }
+  .panel-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px;}
+  .panel-head h2{font-family:'Teko',sans-serif; font-size:1.5rem; margin:0; color:var(--marigold); letter-spacing:.02em;}
+  #map{height:560px; border-radius:2px; filter:contrast(1.12) saturate(1.25);}
+  @media (max-width:1180px){ #map{height:420px;} }
+
+  #mapPanel.fullscreen{
+    position:fixed; inset:0; z-index:1200; margin:0; border-radius:0;
+    display:flex; flex-direction:column; padding:14px 18px;
+  }
+  #mapPanel.fullscreen #map{ flex:1; height:auto; border-radius:2px; }
+  #mapPanel.fullscreen .panel-head{ flex-shrink:0; }
+  body.map-fullscreen-active{ overflow:hidden; }
+  /* fullscreen is a dark overlay — keep controls readable */
+  #mapPanel.fullscreen{ background:#15120D; }
+  #mapPanel.fullscreen .filters select{
+    background:#000; color:var(--marigold); border-color:var(--marigold-dk);
+  }
+  #mapPanel.fullscreen .btn.ghost{
+    background:rgba(255,255,255,.06); border-color:var(--marigold-dk); color:var(--marigold);
+  }
+  #mapPanel.fullscreen .btn.ghost:hover{ background:rgba(232,169,58,.25); border-color:var(--marigold); color:var(--gold-soft); }
+  #mapPanel.fullscreen .panel-head h2{ color:var(--marigold); }
+
+  .filters{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+  .filters select, .filters .btn{font-size:.75rem; padding:7px 10px;}
+  .filters select{width:auto; background:#141210; color:var(--paper); border-color:#3a3626;}
+
+  .cards{display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:12px; margin-top:12px;}
+  .ccard{
+    background:var(--card); color:var(--ink); border-radius:2px; padding:14px; position:relative;
+    border-left:5px solid var(--canal);
+  }
+  .ccard.cat-pothole{border-left-color:#8a5a2b;}
+  .ccard.cat-garbage{border-left-color:#5c6b2f;}
+  .ccard.cat-streetlight{border-left-color:var(--marigold-dk);}
+  .ccard.cat-waterlogging{border-left-color:var(--canal);}
+  .ccard .top{display:flex; justify-content:space-between; align-items:flex-start; gap:8px;}
+  .ccard h4{margin:0; font-size:1rem; font-family:'IBM Plex Sans',sans-serif; font-weight:700;}
+  .ccard .meta{font-size:.68rem; color:#665f47; text-transform:uppercase; letter-spacing:.05em; margin-top:2px;}
+  .ccard p{font-size:.8rem; margin:8px 0; line-height:1.45; color:#3a3527;}
+  .stamp{
+    flex-shrink:0; width:54px; height:54px; border-radius:50%; border:2.5px solid var(--signal-red);
+    color:var(--signal-red); display:flex; flex-direction:column; align-items:center; justify-content:center;
+    transform:rotate(-8deg); font-family:'IBM Plex Mono',monospace; line-height:1; opacity:.9;
+  }
+  .stamp b{font-size:1.15rem;}
+  .stamp span{font-size:.5rem; letter-spacing:.05em; text-transform:uppercase;}
+  .ccard .badges{display:flex; gap:6px; flex-wrap:wrap; margin:8px 0;}
+  .badge{font-size:.64rem; padding:2px 7px; border-radius:10px; background:#e2dabf; color:#4a4530; text-transform:uppercase; letter-spacing:.04em;}
+  .badge.status-open{background:var(--signal-red); color:#fff;}
+  .badge.status-progress{background:var(--marigold); color:var(--ink);}
+  .badge.status-resolved{background:var(--route-green); color:#fff;}
+  .ccard .foot{display:flex; justify-content:space-between; align-items:center; margin-top:10px; gap:6px; flex-wrap:wrap;}
+  .ccard .foot .btn{font-size:.7rem; padding:6px 10px;}
+  .sla{font-size:.66rem; font-family:'IBM Plex Mono',monospace;}
+  .sla.breach{color:var(--signal-red); font-weight:700;}
+
+  /* formula strip */
+  .formula-strip{
+    font-family:'IBM Plex Mono',monospace; background:#141210; border:1px solid #3a3626; border-radius:2px;
+    padding:16px; font-size:.85rem; line-height:1.7;
+  }
+  .formula-strip .f{color:var(--marigold); font-size:1rem;}
+  .formula-strip .note{color:#9c927a; font-size:.75rem; margin-top:8px;}
+  .worked{margin-top:12px; padding-top:10px; border-top:1px dashed #3a3626; font-size:.78rem;}
+
+  /* dedup explain */
+  .dedup-set{display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap;}
+  .cluster-explain{
+    background:#141210; border:1px solid #3a3626; border-radius:2px; padding:10px 12px; margin-bottom:8px; font-size:.78rem;
+  }
+  .cluster-explain .ch{display:flex; justify-content:space-between; font-family:'IBM Plex Mono',monospace; color:var(--marigold); margin-bottom:4px;}
+  .cluster-explain .pair{color:#9c927a; margin-top:3px; padding-left:8px; border-left:2px solid #3a3626;}
+  .score-hi{color:var(--route-green); font-weight:700;}
+  .score-lo{color:#9c927a;}
+
+  .toast-wrap{position:fixed; bottom:18px; right:18px; z-index:999; display:flex; flex-direction:column; gap:8px;}
+  .toast{background:var(--card); color:var(--ink); padding:10px 14px; border-radius:2px; font-size:.78rem; box-shadow:0 6px 18px rgba(0,0,0,.4); border-left:4px solid var(--route-green); max-width:320px;}
+
+  /* admin login modal */
+  .modal-overlay{
+    position:fixed; inset:0; z-index:1400; background:rgba(10,9,6,.72);
+    display:none; align-items:center; justify-content:center; padding:20px;
+  }
+  .modal-overlay.show{display:flex;}
+  .modal-box{
+    background:var(--card); color:var(--ink); width:100%; max-width:320px;
+    padding:24px 22px; border-radius:3px; box-shadow:0 16px 40px rgba(0,0,0,.55);
+    position:relative;
+  }
+  .modal-box::before{
+    content:""; position:absolute; top:0; left:0; right:0; height:4px;
+    background:repeating-linear-gradient(135deg,var(--marigold) 0 10px, var(--ink) 10px 20px);
+  }
+  .modal-box h3{font-family:'Teko',sans-serif; font-size:1.7rem; margin:8px 0 2px; color:var(--signal-red); letter-spacing:.02em;}
+  .modal-box .sub{font-size:.72rem; color:#665f47; margin-bottom:16px; text-transform:uppercase; letter-spacing:.06em;}
+  .modal-box input{margin-bottom:6px;}
+  .modal-err{color:var(--signal-red); font-size:.72rem; min-height:16px; margin-bottom:6px; font-weight:600;}
+  .modal-actions{display:flex; gap:8px; justify-content:flex-end; margin-top:10px;}
+
+  footer{text-align:center; padding:20px; color:#5c5745; font-size:.7rem;}
+
+  ::-webkit-scrollbar{width:8px;}
+  ::-webkit-scrollbar-thumb{background:#3a3626;}
+
+  .pulse-marker{width:16px; height:16px; border-radius:50%; background:var(--signal-red); border:2px solid #fff;
+    box-shadow:0 0 0 rgba(178,58,46,.6); animation:pulseAnim 1.4s infinite;}
+  @keyframes pulseAnim{
+    0%{box-shadow:0 0 0 0 rgba(178,58,46,.55);}
+    70%{box-shadow:0 0 0 22px rgba(178,58,46,0);}
+    100%{box-shadow:0 0 0 0 rgba(178,58,46,0);}
+  }
+
+  /* twinkling stars scattered across blank/empty background areas (citizen + admin) */
+  .starfield{position:fixed; inset:0; z-index:-1; pointer-events:none; overflow:hidden;}
+  .starfield .star{
+    position:absolute; border-radius:50%; background:var(--marigold);
+    box-shadow:0 0 4px 1px var(--marigold), 0 0 8px 2px rgba(232,169,58,.45);
+    animation:twinkle ease-in-out infinite;
+  }
+  @keyframes twinkle{
+    0%,100%{opacity:.15; transform:scale(.6);}
+    50%{opacity:1; transform:scale(1.5);}
+  }
+</style>
+</head>
+<body>
+
+<div class="starfield" id="starfield"></div>
+<div class="hazard"></div>
+<header>
+  <div class="brand">
+    <h1 class="disp">NAGAR AI</h1>
+    <span class="tag">Ward Control Room · Chennai Corp. Demo Zone</span>
+  </div>
+  <div class="stat">Open issues affecting <b id="statPeople">—</b> citizens<br>Deduped from <b id="statRaw">—</b> raw reports</div>
+</header>
+
+<div class="view-bar">
+  <div class="view-switch">
+    <button class="active" data-view="citizen" id="btnViewCitizen">👤 Citizen — File a Complaint</button>
+    <button data-view="status" id="btnViewStatus">🔎 Track Status</button>
+    <button data-view="admin" id="btnViewAdmin">🛡 Admin — Ward Control Room</button>
+  </div>
+  <span class="view-note" id="viewNote">Public intake view — anyone filing an issue.</span>
+</div>
+
+<main>
+  <div class="grid">
+
+    <!-- INTAKE (CITIZEN) -->
+    <section class="receipt" id="citizenView">
+      <h2>FILE A COMPLAINT</h2>
+      <div class="sub">Voice · Photo · Text — any language</div>
+
+      <div class="tabs">
+        <button class="active" data-tab="text">Text rant</button>
+        <button data-tab="voice">Voice note</button>
+        <button data-tab="photo">Photo</button>
+      </div>
+
+      <div id="tab-text" class="tabpane">
+        <div class="field">
+          <label>Type it however you'd say it</label>
+          <textarea id="inText" placeholder="e.g. Anna Nagar 2nd avenue-la streetlight konjo naala vela seyala, romba dangerous night-la..."></textarea>
+          <div class="hint">Tamil, Hindi, English or mixed — the extractor reads all of it.</div>
+        </div>
+      </div>
+
+      <div id="tab-voice" class="tabpane" style="display:none">
+        <div class="field">
+          <label>Record voice note</label>
+          <div class="mic-row">
+            <button class="btn full" id="micBtn" type="button">🎙️ Start recording</button>
+            <select id="micLang">
+              <option value="auto">Auto</option>
+              <option value="ta-IN">Tamil</option>
+              <option value="hi-IN">Hindi</option>
+              <option value="en-IN">English (India)</option>
+            </select>
+          </div>
+          <div class="mic-status" id="micStatus"></div>
+        </div>
+        <div class="field">
+          <label>Transcript (auto-translated to English — edit if needed)</label>
+          <textarea id="inVoice" placeholder="🎙️ Tap 'Start recording' and speak in Tamil, Hindi, or English — it will be translated to English here, or type/paste a transcript directly"></textarea>
+          <div class="hint" id="origTranscriptHint" style="display:none"></div>
+          <div class="hint">Location is resolved from whichever area name is spoken/typed, and the map will fly to it on submit.</div>
+        </div>
+      </div>
+
+      <div id="tab-photo" class="tabpane" style="display:none">
+        <div class="field">
+          <label>Upload photo of the issue</label>
+          <div class="file-drop" id="photoDrop">Click to upload (pothole / garbage / streetlight / waterlogging)<div id="photoPreviewWrap"></div></div>
+          <input type="file" id="photoInput" accept="image/*" style="display:none">
+          <div class="hint" id="exifStatus"></div>
+        </div>
+        <div class="field">
+          <label>Anything to add in words? (optional)</label>
+          <input type="text" id="inPhotoText" placeholder="e.g. near Velachery bus depot">
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Location</label>
+        <div class="locrow">
+          <input type="text" id="inLat" placeholder="lat (GPS share)">
+          <input type="text" id="inLng" placeholder="lng (GPS share)">
+        </div>
+        <div class="hint">No GPS? Leave blank — we'll try to resolve it from the area you mention in the text.</div>
+      </div>
+
+      <button class="btn full" id="submitBtn">⌁ Submit &amp; run AI intake</button>
+
+      <div class="stampbox" id="resultStamp">
+        <div class="row"><span>🪙 Ticket ID</span><b id="rId">—</b></div>
+        <div class="row"><span>Category</span><b id="rCat">—</b></div>
+        <div class="row"><span>Severity</span><b id="rSev">—</b></div>
+        <div class="row"><span>Location resolved</span><b id="rLoc">—</b></div>
+        <div class="row"><span>Clean summary</span></div>
+        <div id="rDesc" style="margin-top:2px;color:#3a3527;"></div>
+        <div class="row" style="margin-top:6px;"><span>Photo metadata (EXIF)</span></div>
+        <div id="rPhotoMeta" style="margin-top:2px;color:#3a3527;font-family:'IBM Plex Mono',monospace;font-size:.72rem;"></div>
+        <div class="row" style="margin-top:6px;"><span>Dedup result</span><b id="rDedup">—</b></div>
+      </div>
+
+      <div class="log">
+        <h3>Live intake log</h3>
+        <div id="intakeLog"></div>
+      </div>
+    </section>
+
+    <!-- DASHBOARD (ADMIN) -->
+    <section id="adminView">
+      <div class="admin-grid">
+
+        <div class="admin-left">
+          <div class="panel">
+            <div class="panel-head">
+              <h2>CLUSTER CARDS</h2>
+              <span class="mono" style="font-size:.7rem;color:#9c927a" id="cardCount"></span>
+            </div>
+            <div class="cards" id="cardsWrap"></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h2>PRIORITY FORMULA</h2></div>
+            <div class="formula-strip">
+              <div class="f">priority = severity(1–5) × √(affected_citizens) × min(days_pending, 30) × proximity_multiplier</div>
+              <div class="note">
+                proximity_multiplier = 1.5 if any report in the cluster is within 200 m of a geocoded school/hospital, else 1.0.<br>
+                √(affected) dampens brigading — 10 duplicate reports gives ×3.16, not ×10. days_pending is capped at 30 so an old, forgotten complaint can't mathematically outrank an active emergency forever. Severity and location must still be independently corroborated by ≥1 report before the multiplier applies, so a single fake "near hospital" tag can't dominate the score on its own.
+              </div>
+              <div class="worked" id="workedExample">Worked example loads after you run the judging set below ↓</div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h2>JUDGING SET — LIVE DEDUP</h2>
+              <div class="dedup-set">
+                <button class="btn marigold" id="loadJudging">Load 15-complaint set</button>
+                <button class="btn ghost" id="runDedup" disabled>Run live dedup</button>
+                <button class="btn ghost" id="resetAll">Reset board</button>
+              </div>
+            </div>
+            <div id="dedupExplain"></div>
+          </div>
+        </div>
+
+        <div class="admin-right">
+          <div class="panel" id="mapPanel">
+            <div class="panel-head">
+              <h2>WARD MAP</h2>
+              <button class="btn ghost" id="mapFullscreenBtn" type="button" title="Toggle fullscreen map">⛶ Fullscreen</button>
+            </div>
+            <div class="filters" style="margin-bottom:10px;">
+              <select id="fCategory">
+                <option value="">All categories</option>
+                <option value="pothole">Pothole</option>
+                <option value="garbage">Garbage</option>
+                <option value="streetlight">Streetlight</option>
+                <option value="waterlogging">Waterlogging</option>
+              </select>
+              <select id="fStatus">
+                <option value="">All statuses</option>
+                <option value="open">Open</option>
+                <option value="progress">In progress</option>
+                <option value="resolved">Resolved</option>
+              </select>
+              <select id="fSort">
+                <option value="priority">Sort: priority ↓</option>
+                <option value="days">Sort: days pending ↓</option>
+                <option value="affected">Sort: affected ↓</option>
+              </select>
+            </div>
+            <div id="map"></div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- STATUS (CITIZEN TRACKING) -->
+    <section class="receipt" id="statusView">
+      <h2>TRACK YOUR COMPLAINT</h2>
+      <div class="sub">Enter the complaint ID you received when filing</div>
+      <div class="field">
+        <label>Complaint ID</label>
+        <div class="locrow">
+          <input type="text" id="trackId" placeholder="e.g. 42">
+          <button class="btn" id="trackBtn" type="button">Go</button>
+        </div>
+        <div class="hint">Shown on the receipt after you file — a short number like #42.</div>
+      </div>
+      <div id="trackResult"></div>
+
+      <div class="field" style="margin-top:16px;">
+        <label>Is it fixed? — send a photo</label>
+        <div class="file-drop" id="verifyDrop">Click to upload a "now" photo of the same spot<div id="verifyPreviewWrap"></div></div>
+        <input type="file" id="verifyInput" accept="image/*" style="display:none">
+        <div class="hint">If your complaint is part of a resolved cluster, this photo tells the ward whether it's really fixed.</div>
+      </div>
+      <button class="btn full" id="verifyBtn" type="button" disabled>📷 Submit verification photo</button>
+      <div id="verifyResult" style="margin-top:10px"></div>
+    </section>
+
+  </div>
+</main>
+
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<div class="modal-overlay" id="adminLoginOverlay">
+  <div class="modal-box">
+    <h3>ADMIN LOGIN</h3>
+    <div class="sub">Ward Control Room — authorized staff only</div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="adminPasswordInput" placeholder="••••••••••••">
+    </div>
+    <div class="modal-err" id="adminLoginErr"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="adminLoginCancel" type="button">Cancel</button>
+      <button class="btn" id="adminLoginSubmit" type="button">Login</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.js"></script>
+<script>
+
+/* ================= PRODUCTION BACKEND (server at :9999) ================= */
+const API = '/api';
+async function j(method, path, body) {
+  const opts = { method, headers: {} };
+  if (body instanceof FormData) opts.body = body;
+  else if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  const r = await fetch(API + path, opts);
+  if (!r.ok) throw new Error((await r.text()).slice(0, 200));
+  return r.json();
+}
+const DEPARTMENTS = {
+  pothole: "Roads & Pavements Dept",
+  garbage: "Solid Waste Management Dept",
+  broken_streetlight: "Electrical / Street Lighting Dept",
+  streetlight: "Electrical / Street Lighting Dept",
+  waterlogging: "Storm Water Drain Dept",
+  other: "General Administration"
+};
+const SLA_HOURS = { pothole:72, garbage:48, broken_streetlight:96, streetlight:96, waterlogging:48, other:168 };
+const CAT_LABEL = { pothole:"Pothole", garbage:"Garbage", broken_streetlight:"Streetlight", streetlight:"Streetlight", waterlogging:"Waterlogging", other:"Other" };
+const AREA_GEOCODE = {
+  "t nagar":[13.0418,80.2341], "panagal park":[13.0418,80.2341],
+  "adyar":[13.0067,80.2570], "velachery":[12.9756,80.2207], "anna nagar":[13.0850,80.2101],
+  "tambaram":[12.9249,80.1000], "mylapore":[13.0339,80.2619], "pallikaranai":[12.9345,80.2129],
+  "guindy":[13.0067,80.2206], "perambur":[13.1179,80.2453], "nungambakkam":[13.0603,80.2417],
+  "kodambakkam":[13.0510,80.2277], "vadapalani":[13.0503,80.2121], "porur":[13.0381,80.1564],
+  "ambattur":[13.1143,80.1548], "chromepet":[12.9516,80.1462], "koyambedu":[13.0718,80.2123],
+  "mount road":[13.061,80.246], "usman road":[13.041,80.234]
+};
+let issues = [];
+let map, markerLayer;
+let catF = "", statF = "", sortF = "priority";
+const CAT_COLOR = { pothole:"#8a5a2b", garbage:"#5c6b2f", broken_streetlight:"#e8a93a", streetlight:"#e8a93a", waterlogging:"#3e5c66", other:"#9c927a" };
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function toast(msg){
+  const wrap=document.getElementById('toastWrap');
+  const el=document.createElement('div'); el.className='toast'; el.textContent=msg;
+  wrap.appendChild(el); setTimeout(()=>el.remove(),4600);
+}
+function guessLocation(text){
+  const low=(text||"").toLowerCase();
+  for(const key in AREA_GEOCODE){ if(low.includes(key)) return {name:key, coords:AREA_GEOCODE[key]}; }
+  return null;
+}
+async function loadIssues(){
+  const qs = new URLSearchParams();
+  if(catF) qs.set('category', catF);
+  if(statF) qs.set('status', statF);
+  try { issues = await j('GET', '/issues?' + qs); }
+  catch(e){ toast('Server unreachable: ' + e.message); return; }
+  refresh();
+}
+function clusterMetrics(issue){
+  const severity = Math.max(1, Math.min(5, Math.round(issue.severity || 3)));
+  const affected = issue.affected_count || 1;
+  let days = 0;
+  if(issue.created_at){
+    const d = new Date(issue.created_at.replace(' ','T')+'Z');
+    days = Math.max(0, (Date.now()-d.getTime())/86400000);
+  }
+  let proximity = 1.0, nearName = null;
+  try {
+    const pois = JSON.parse(issue.school_hospital_prox || '[]');
+    if(pois.length){ proximity = 1.5; nearName = pois[0].name; }
+  } catch(e){}
+  let band = 3; try { band = JSON.parse(issue.priority_reason || '{}').band; } catch(e){}
+  const priority = Math.round(issue.priority_score || 0);
+  const category = issue.category;
+  const status = issue.status || "open";
+  const slaHours = SLA_HOURS[category] || 168;
+  const slaBreached = (days*24) > slaHours;
+  const dept = issue.dept || DEPARTMENTS[category] || 'General Administration';
+  const lat = issue.centroid_lat, lng = issue.centroid_lng;
+  return { severity, affected, days, proximity, nearName, priority, category, status, slaHours, slaBreached, dept, lat, lng, band };
+}
+function renderStats(){
+  const open = issues.filter(i=>i.status!=="resolved");
+  const affected = open.reduce((s,i)=>s+(i.affected_count||1),0);
+  document.getElementById('statPeople').textContent = affected;
+  document.getElementById('statRaw').textContent = issues.reduce((s,i)=>s+(i.affected_count||1),0);
+}
+function renderMap(){
+  if(!map) initMap();
+  markerLayer.clearLayers();
+  const matchedPts = [];
+  issues.forEach(issue=>{
+    const m = clusterMetrics(issue);
+    if(!m.lat) return;
+    const marker = L.circleMarker([m.lat,m.lng],{
+      radius:6+Math.min(10,(m.affected||1)*2),
+      color: CAT_COLOR[m.category], fillColor: CAT_COLOR[m.category], fillOpacity:.75, weight:2
+    }).bindPopup('<b style="text-transform:capitalize">'+CAT_LABEL[m.category]+'</b><br>priority '+m.priority+' · '+m.affected+' affected<br>'+esc(issue.summary||'').slice(0,80)+'<br><i>'+m.dept+'</i>');
+    marker.addTo(markerLayer);
+    matchedPts.push([m.lat,m.lng]);
+  });
+  if(activeHighlight){ map.removeLayer(activeHighlight); activeHighlight=null; }
+  if(catF || statF){
+    if(matchedPts.length===1) map.flyTo(matchedPts[0], 15, {duration:1.1});
+    else if(matchedPts.length>1) map.flyToBounds(L.latLngBounds(matchedPts), {padding:[60,60], maxZoom:14, duration:1.1});
+  } else {
+    map.flyTo([13.03,80.22], 11, {duration:1.1});
+  }
+}
+function renderCards(){
+  let rows = issues.map(i=>({issue:i, m:clusterMetrics(i)}));
+  if(sortF==="affected") rows.sort((a,b)=>b.m.affected-a.m.affected);
+  else if(sortF==="days") rows.sort((a,b)=>b.m.days-a.m.days);
+  else rows.sort((a,b)=>b.m.priority-a.m.priority);
+  document.getElementById('cardCount').textContent = rows.length + " clusters shown";
+  const wrap = document.getElementById('cardsWrap');
+  wrap.innerHTML = "";
+  rows.forEach(({issue,m})=>{
+    const el = document.createElement('div');
+    el.className = 'ccard cat-' + m.category;
+    // keen detail from original v4: photo EXIF line on the card (taken · camera · GPS)
+    let photoLine = '';
+    const pm = issue.members && issue.members.length ? null : null;
+    if(issue.photoMeta){
+      const pmd = (typeof issue.photoMeta === 'string') ? JSON.parse(issue.photoMeta) : issue.photoMeta;
+      const bits = [];
+      if(pmd.captured_at) bits.push(new Date(pmd.captured_at.replace('T',' ')).toLocaleString());
+      if(pmd.make || pmd.model) bits.push([pmd.make, pmd.model].filter(Boolean).join(' '));
+      if(pmd.gps) bits.push('GPS ' + pmd.gps.lat.toFixed(5) + ', ' + pmd.gps.lng.toFixed(5));
+      if(bits.length) photoLine = '<div class="meta" style="margin:-4px 0 8px;">📷 ' + bits.join(' · ') + '</div>';
+    }
+    el.innerHTML = '<div class="top"><div><h4>'+(CAT_LABEL[m.category]||m.category)+'</h4><div class="meta">'+m.dept+(m.band?' · band '+m.band:'')+'</div></div><div class="stamp"><b>'+m.priority+'</b><span>priority</span></div></div>' +
+      '<p>'+esc(issue.summary)+'</p>' +
+      photoLine +
+      '<div class="badges"><span class="badge status-'+m.status+'">'+m.status.replace(/_/g,' ')+'</span><span class="badge">'+m.affected+' affected</span><span class="badge">'+Math.round(m.days)+'d pending</span>'+(m.proximity>1?'<span class="badge">near '+esc(m.nearName)+'</span>':'')+'</div>' +
+      '<div class="foot"><span class="sla '+(m.slaBreached?'breach':'')+'">SLA '+m.slaHours+'h '+(m.slaBreached?'· BREACHED':'')+'</span><div style="display:flex;gap:6px;">'+(m.status!=="resolved"?'<button class="btn ghost" data-id="'+issue.id+'" data-status="in_progress">In progress</button><button class="btn green" data-id="'+issue.id+'" data-status="resolved">✓ Resolve</button>':'')+'</div></div>';
+    wrap.appendChild(el);
+  });
+  wrap.querySelectorAll('[data-status]').forEach(btn=>{
+    btn.addEventListener('click', ()=>setIssueStatus(btn.dataset.id, btn.dataset.status));
+  });
+}
+async function setIssueStatus(id, status){
+  try {
+    const issue = issues.find(i=>i.id===+id);
+    await j('POST', '/issues/'+id+'/status?status='+encodeURIComponent(status)+'&dept='+encodeURIComponent(issue?.dept||DEPARTMENTS[issue?.category]||'General Administration'));
+    toast(status==="resolved" ? '📩 Citizens of issue #'+id+' notified — "'+(CAT_LABEL[issue?.category]||'')+' marked RESOLVED."' : 'Status → '+status.replace(/_/g,' ')+' · routed to '+(issue?.dept||''));
+    loadIssues();
+  } catch(e){ toast('Error: '+e.message); }
+}
+function renderDedupExplain(){
+  const wrap = document.getElementById('dedupExplain');
+  const merged = issues.filter(i=>((i.members||[]).length||i.affected_count||0)>1);
+  if(!merged.length){
+    wrap.innerHTML = '<div class="hint" style="color:#9c927a">Live server dedup — merged clusters appear here with their similarity breakdowns.</div>';
+    document.getElementById('workedExample').textContent = "Worked example appears when merged clusters load.";
+    return;
+  }
+  let html = '<div class="cluster-explain"><div class="ch"><span>LIVE MERGED CLUSTERS ('+merged.length+')</span><span>server similarity scores</span></div>';
+  merged.forEach(i=>{
+    const members = (i.members||[]).map(m=>'<div class="pair">complaint #'+m.complaint_id+' — sim '+Math.round((m.sim_total||0)*100)+'% (t'+(+m.text_score||0).toFixed(2)+' g'+(+m.geo_score||0).toFixed(2)+' v'+(+m.vision_score||0).toFixed(2)+')</div>').join("");
+    html += '<div class="pair" style="border-left:none;padding-left:0;margin-top:6px"><b>'+(CAT_LABEL[i.category]||i.category)+'</b> — issue #'+i.id+' · '+i.affected_count+' affected</div>'+members;
+  });
+  html += '</div>';
+  wrap.innerHTML = html;
+  const open = issues.filter(i=>i.status!=="resolved").map(i=>({issue:i,m:clusterMetrics(i)})).sort((a,b)=>b.m.priority-a.m.priority);
+  if(open.length){
+    const top = open[0];
+    let r={}; try{ r = JSON.parse(top.issue.priority_reason||'{}'); }catch(e){}
+    document.getElementById('workedExample').innerHTML =
+      '<b>Worked example</b> — top issue "'+CAT_LABEL[top.m.category]+'" (affected '+top.m.affected+'):<br>' +
+      'severity S='+top.m.severity+' · P='+(typeof r.P==='number'?r.P.toFixed(2):'—')+' (affected) · T='+(typeof r.T==='number'?r.T.toFixed(2):'—')+' (days '+Math.round(top.m.days)+') · L='+(typeof r.L==='number'?r.L.toFixed(2):'—')+(top.m.proximity>1?' (within 100m of '+esc(top.m.nearName)+')':'')+'<br>' +
+      'band '+(r.band||top.m.band)+' → <b style="color:#e8a93a">priority '+top.m.priority+'/100</b>';
+  }
+}
+function refresh(){ renderStats(); renderMap(); renderCards(); renderDedupExplain(); }
+function initMap(){
+  map = L.map('map', {scrollWheelZoom:false}).setView([13.03,80.22], 11);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{ attribution:'&copy; OpenStreetMap &copy; CARTO', maxZoom:19 }).addTo(map);
+  markerLayer = L.layerGroup().addTo(map);
+}
+let activeHighlight = null;
+function flyToAndMark(lat, lng, areaName, category){
+  if(isNaN(lat) || isNaN(lng)) return;
+  map.flyTo([lat,lng], 15, {duration:1.1});
+  if(activeHighlight){ map.removeLayer(activeHighlight); activeHighlight=null; }
+  const icon = L.divIcon({className:'pulse-marker', iconSize:[16,16]});
+  activeHighlight = L.marker([lat,lng], {icon}).addTo(map);
+  activeHighlight.bindPopup('<b style="text-transform:capitalize">'+(CAT_LABEL[category]||category)+'</b> complaint located'+(areaName ? ' — '+areaName : '')).openPopup();
+}
+let mapSizedOnce = false;
+function setView(v){
+  document.body.dataset.view = v;
+  document.querySelectorAll('.view-switch button').forEach(b=>b.classList.toggle('active', b.dataset.view===v));
+  document.getElementById('viewNote').textContent = v==="citizen"
+    ? "Public intake view — anyone filing an issue."
+    : (v==="status"
+      ? "Public tracking view — check the status of a filed complaint by its ID."
+      : "Ward staff view — map, clusters, priority scoring & status controls.");
+  if(v==="admin" && !mapSizedOnce){
+    setTimeout(()=>{ map.invalidateSize(); mapSizedOnce = true; }, 60);
+  }
+}
+document.querySelectorAll('.view-switch button').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    const v = b.dataset.view;
+    if(v === "admin" && !adminAuthed){ openAdminLogin(); return; }
+    setView(v);
+  });
+});
+const ADMIN_PASSWORD = "<ADMIN_PASSWORD>";
+let adminAuthed = false;
+const adminOverlay = document.getElementById('adminLoginOverlay');
+const adminPasswordInput = document.getElementById('adminPasswordInput');
+const adminLoginErr = document.getElementById('adminLoginErr');
+function openAdminLogin(){
+  adminLoginErr.textContent = ""; adminPasswordInput.value = "";
+  adminOverlay.classList.add('show'); setTimeout(()=>adminPasswordInput.focus(), 50);
+}
+function closeAdminLogin(){ adminOverlay.classList.remove('show'); }
+function attemptAdminLogin(){
+  if(adminPasswordInput.value === ADMIN_PASSWORD){
+    adminAuthed = true; closeAdminLogin(); setView('admin'); loadIssues();
+  } else {
+    adminLoginErr.textContent = "Incorrect password. Try again.";
+    adminPasswordInput.value = ""; adminPasswordInput.focus();
+  }
+}
+document.getElementById('adminLoginSubmit').addEventListener('click', attemptAdminLogin);
+document.getElementById('adminLoginCancel').addEventListener('click', closeAdminLogin);
+adminPasswordInput.addEventListener('keydown', (e)=>{ if(e.key==="Enter") attemptAdminLogin(); });
+adminOverlay.addEventListener('click', (e)=>{ if(e.target===adminOverlay) closeAdminLogin(); });
+document.addEventListener('keydown', (e)=>{ if(e.key==="Escape" && adminOverlay.classList.contains('show')) closeAdminLogin(); });
+
+/* VOICE → server ASR */
+let mediaRec = null, audioChunks = [], audioBlob = null, micStream = null;
+let voiceTranscript = "";   // transcript from /asr preview, reused on submit
+const micBtn = document.getElementById('micBtn');
+const micStatus = document.getElementById('micStatus');
+const micLang = document.getElementById('micLang');
+micBtn.addEventListener('click', async ()=>{
+  if(mediaRec && mediaRec.state === 'recording'){ mediaRec.stop(); return; }
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRec = new MediaRecorder(micStream);
+    audioChunks = [];
+    mediaRec.ondataavailable = e => audioChunks.push(e.data);
+    mediaRec.onstop = async ()=>{
+      micStream.getTracks().forEach(t=>t.stop());
+      audioBlob = new Blob(audioChunks, { type: mediaRec.mimeType || 'audio/webm' });
+      micBtn.textContent = "🎙️ Start recording"; micBtn.classList.remove('recording');
+      micStatus.innerHTML = '<span style="color:var(--signal-red);font-weight:700">● Server ASR transcribing...</span>';
+      try {
+        const fd = new FormData();
+        fd.append('audio', audioBlob, 'voice.' + (audioBlob.type.includes('webm') ? 'webm' : 'wav'));
+        fd.append('language', micLang.value);
+        // fast transcribe-only endpoint (no extraction/dedup) for the preview
+        const resp = await j('POST', '/asr', fd);
+        const t = resp.transcript || '';
+        voiceTranscript = t;                 // reused on submit (no double ASR)
+        document.getElementById('inVoice').value = t;
+        const origHint = document.getElementById('origTranscriptHint');
+        if(t){
+          micStatus.innerHTML = '<span style="color:var(--route-green);font-weight:700">✓ Transcribed:</span> '+t;
+          origHint.style.display = "none";
+          toast("Voice transcribed — now submit to file (English summary is generated on submit).");
+        } else {
+          micStatus.textContent = "Server heard nothing clear — try again, or type it below.";
+          voiceTranscript = "";
+        }
+      } catch(err){ micStatus.textContent = "Server ASR error: " + err.message; }
+    };
+    mediaRec.start();
+    micBtn.textContent = "⏹ Stop recording"; micBtn.classList.add('recording');
+    micStatus.innerHTML = '<span class="mic-dot"></span>Recording — speak naturally (Tamil / Hindi / English, mixed OK)';
+  } catch(e){
+    const secure = (window.isSecureContext === true);
+    micStatus.textContent = secure
+      ? "Microphone permission denied — allow the mic in the address bar, then try again."
+      : "Mic blocked — open this page over HTTPS (secure context) to allow the microphone, or type the transcript below.";
+  }
+});
+
+/* INTAKE */
+let currentTab = "text";
+document.querySelectorAll('.tabs button').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    currentTab = b.dataset.tab;
+    document.querySelectorAll('.tabpane').forEach(p=>p.style.display='none');
+    document.getElementById('tab-'+currentTab).style.display='block';
+  });
+});
+let uploadedPhoto = null;
+document.getElementById('photoDrop').addEventListener('click', ()=>document.getElementById('photoInput').click());
+document.getElementById('photoInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  uploadedPhoto = { file, meta: {} };
+  const reader = new FileReader();
+  reader.onload = ()=>{ document.getElementById('photoPreviewWrap').innerHTML = '<img src="'+reader.result+'">'; };
+  reader.readAsDataURL(file);
+  const exifStatus = document.getElementById('exifStatus');
+  exifStatus.textContent = "Reading photo metadata...";
+  if(typeof EXIF === "undefined"){ exifStatus.textContent = ""; return; }
+  EXIF.getData(file, function(){
+    const lat = EXIF.getTag(this, "GPSLatitude");
+    const latRef = EXIF.getTag(this, "GPSLatitudeRef");
+    const lng = EXIF.getTag(this, "GPSLongitude");
+    const lngRef = EXIF.getTag(this, "GPSLongitudeRef");
+    const dateRaw = EXIF.getTag(this, "DateTimeOriginal") || EXIF.getTag(this, "DateTime");
+    const make = EXIF.getTag(this, "Make");
+    const model = EXIF.getTag(this, "Model");
+    const statusParts = [];
+    if(lat && lng){
+      const toDecimal = (dms, ref)=>{ let dec = dms[0] + dms[1]/60 + dms[2]/3600; if(ref==="S"||ref==="W") dec = -dec; return dec; };
+      const decLat = toDecimal(lat, latRef), decLng = toDecimal(lng, lngRef);
+      document.getElementById('inLat').value = decLat.toFixed(6);
+      document.getElementById('inLng').value = decLng.toFixed(6);
+      uploadedPhoto.meta.lat = decLat; uploadedPhoto.meta.lng = decLng;
+      statusParts.push("📍 GPS auto-filled");
+    } else { statusParts.push("no GPS tag"); }
+    if(dateRaw){
+      const iso = dateRaw.replace(/^(\\d{4}):(\\d{2}):(\\d{2})/, '$1-$2-$3');
+      const d = new Date(iso);
+      if(!isNaN(d)){ uploadedPhoto.meta.takenAt = d.toISOString(); statusParts.push("taken " + d.toLocaleString()); }
+    }
+    if(make || model){ uploadedPhoto.meta.camera = [make,model].filter(Boolean).join(" ").trim(); statusParts.push(uploadedPhoto.meta.camera); }
+    exifStatus.textContent = statusParts.length ? statusParts.join(" · ") : "No EXIF metadata found in this photo.";
+  });
+});
+function logIntake(text){
+  const log = document.getElementById('intakeLog');
+  const el = document.createElement('div'); el.className='log-item'; el.innerHTML = text;
+  log.prepend(el);
+}
+document.getElementById('submitBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true; btn.textContent = "⌁ Running AI intake...";
+  try {
+    const fd = new FormData();
+    const latRaw = document.getElementById('inLat').value.trim();
+    const lngRaw = document.getElementById('inLng').value.trim();
+    const lang = document.getElementById('micLang').value;
+    if(currentTab === "photo"){
+      if(!uploadedPhoto){ toast("Upload a photo first."); return; }
+      fd.append('image', uploadedPhoto.file, uploadedPhoto.file.name);
+      const extra = document.getElementById('inPhotoText').value.trim();
+      if(extra) fd.append('text', extra);
+      if(latRaw && lngRaw){ fd.append('lat', latRaw); fd.append('lng', lngRaw); }
+    } else if(currentTab === "voice"){
+      // reuse the /asr transcript if we have one — no double ASR, much faster
+      const raw = voiceTranscript || document.getElementById('inVoice').value;
+      if(!raw.trim()){ toast("Record a voice note or type a transcript first."); return; }
+      fd.append('text', raw);
+      fd.append('language', lang);
+      if(latRaw && lngRaw){ fd.append('lat', latRaw); fd.append('lng', lngRaw); }
+    } else {
+      const raw = document.getElementById('inText').value;
+      if(!raw.trim()){ toast("Type something first."); return; }
+      fd.append('text', raw);
+      if(latRaw && lngRaw){ fd.append('lat', latRaw); fd.append('lng', lngRaw); }
+    }
+    const resp = await j('POST', '/complaints', fd);
+    const c = resp.complaint, d = resp.dedup;
+    const area = guessLocation(c.location_text || c.summary || '');
+    let lat = c.lat, lng = c.lng;
+    if(isNaN(lat) && area){ lat = area.coords[0] + (Math.random()-0.5)*0.001; lng = area.coords[1] + (Math.random()-0.5)*0.001; }
+    document.getElementById('resultStamp').classList.add('show');
+    document.getElementById('rId').textContent = c.id || d.complaint_id || '—';
+    document.getElementById('rCat').textContent = c.category.replace(/_/g,' ');
+    document.getElementById('rSev').textContent = c.severity + "/5";
+    document.getElementById('rLoc').textContent = c.lat ? c.lat.toFixed(4)+", "+c.lng.toFixed(4) + (c.loc_source === "photo_exif" ? " (from photo EXIF)" : "") : (area ? area.name : "needs pin");
+    document.getElementById('rDesc').textContent = c.summary;
+    // exact photo metadata (server-side EXIF extraction)
+    const pm = c.photo_meta || {};
+    const pmParts = [];
+    if(pm.make || pm.model) pmParts.push([pm.make, pm.model].filter(Boolean).join(' '));
+    if(pm.captured_at) pmParts.push(pm.captured_at.replace('T',' '));
+    if(pm.gps) pmParts.push('GPS ' + pm.gps.lat.toFixed(6) + ', ' + pm.gps.lng.toFixed(6));
+    if(pm.altitude_m != null) pmParts.push(pm.altitude_m + 'm');
+    if(pm.orientation) pmParts.push('orientation ' + pm.orientation);
+    document.getElementById('rPhotoMeta').textContent = pmParts.length ? pmParts.join(' · ') : 'no EXIF metadata';
+    const dedupNote = d.merged
+      ? 'merged with issue #'+d.issue_id+' (sim '+Math.round((d.scores?.sim||0)*100)+'%)'
+      : 'new distinct issue #'+d.issue_id;
+    document.getElementById('rDedup').textContent = dedupNote;
+    logIntake('<b>#'+c.id+'</b> '+c.category+' · sev '+c.severity+' · '+(c.location_text||'area unresolved')+' — '+dedupNote);
+    toast('Filed #'+c.id+' → routed to '+(DEPARTMENTS[c.category]||'General Admin'));
+    if(lat && lng) flyToAndMark(lat, lng, c.location_text, c.category);
+    document.getElementById('inText').value="";
+    document.getElementById('inVoice').value="";
+    document.getElementById('inPhotoText').value="";
+    document.getElementById('inLat').value="";
+    document.getElementById('inLng').value="";
+    uploadedPhoto=null;
+    voiceTranscript="";
+    audioBlob=null;
+    document.getElementById('photoPreviewWrap').innerHTML="";
+    document.getElementById('exifStatus').textContent="";
+    document.getElementById('origTranscriptHint').style.display="none";
+    loadIssues();
+  } catch(e){
+    toast('Intake error: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = "⌁ Submit & run AI intake";
+  }
+});
+
+/* JUDGING SET through server */
+const JUDGING_SET = [
+  {area:"Panagal Park, T Nagar", text:"Periya pothole near Panagal Park bus stop, bike vizhunthadhu already", lat:13.0418, lng:80.2341},
+  {area:"Panagal Park, T Nagar", text:"Pothole Panagal Park bus stand-la, romba periyathu, 2 accidents nadanthuchu", lat:13.0421, lng:80.2345},
+  {area:"Adyar", text:"Garbage bin near Adyar signal not cleared for 10 days, smell romba bad", lat:13.0067, lng:80.2570},
+  {area:"Adyar", text:"Trash near Adyar signal overflowing, kalla smell varudhu everyday", lat:13.0070, lng:80.2575},
+  {area:"Anna Nagar 2nd Ave", text:"Streetlight 2nd avenue not working since 1 week, dark area la women thani ah walk pandra", lat:13.0850, lng:80.2101},
+  {area:"Velachery Main Rd", text:"Velachery main road full ah thanni thanginu irukku, buses stuck", lat:12.9756, lng:80.2207},
+  {area:"Velachery bus depot", text:"Water logging near Velachery bus depot, knee deep water everywhere", lat:12.9759, lng:80.2210},
+  {area:"Tambaram", text:"Large pothole outside Tambaram govt hospital gate, ambulance problem aagudhu", lat:12.9252, lng:80.1002},
+  {area:"Perambur", text:"Garbage dump growing near Perambur market, rats increasing badly", lat:13.1179, lng:80.2453},
+  {area:"Nungambakkam", text:"3 streetlights down on Nungambakkam high road, accident risk night time", lat:13.0603, lng:80.2417},
+  {area:"Porur", text:"Pothole near Porur signal, water filled, cant see how deep it is", lat:13.0381, lng:80.1564},
+  {area:"Chromepet", text:"Chromepet subway fully waterlogged, no vehicle can pass through", lat:12.9516, lng:80.1462},
+  {area:"Velachery school", text:"Garbage not collected near Velachery Corporation school for 2 weeks now", lat:12.9800, lng:80.2250},
+  {area:"Ambattur estate", text:"Deep pothole Ambattur estate road, two-wheelers falling daily near junction", lat:13.1143, lng:80.1548},
+  {area:"Anna Nagar 2nd Ave", text:"Anna Nagar 2nd avenue light pole dark since many days, safety issue at night", lat:13.0855, lng:80.2107},
+];
+let judgingRunning = false;
+document.getElementById('loadJudging').addEventListener('click', async ()=>{
+  if(judgingRunning) return;
+  judgingRunning = true;
+  const btn = document.getElementById('loadJudging');
+  const runBtn = document.getElementById('runDedup');
+  btn.disabled = true; btn.textContent = "Loading 15 complaints...";
+  document.getElementById('intakeLog').innerHTML = "";
+  try {
+    for(const row of JUDGING_SET){
+      const fd = new FormData();
+      fd.append('text', row.text);
+      fd.append('lat', row.lat); fd.append('lng', row.lng);
+      fd.append('language', 'auto');
+      const resp = await j('POST', '/complaints', fd);
+      const c = resp.complaint, d = resp.dedup;
+      logIntake('<b>#'+c.id+'</b> '+c.category+' · sev '+c.severity+' · '+row.area+' — '+(d.merged ? 'merged' : 'new issue #'+d.issue_id));
+    }
+    loadIssues();
+    runBtn.disabled = false;
+    toast("Loaded 15 raw judging-set complaints through server intake.");
+  } catch(e){
+    toast('Judging set error: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = "Load 15-complaint set";
+    judgingRunning = false;
+  }
+});
+document.getElementById('runDedup').addEventListener('click', ()=>{
+  loadIssues();
+  toast('Live dedup: '+issues.length+' distinct issues on the server.');
+});
+document.getElementById('resetAll').addEventListener('click', ()=>{
+  toast("Reset board: server data is shared — clearing only this view.");
+  issues = [];
+  document.getElementById('intakeLog').innerHTML = "";
+  document.getElementById('runDedup').disabled = true;
+  if(activeHighlight){ map.removeLayer(activeHighlight); activeHighlight=null; }
+  refresh();
+});
+['fCategory','fStatus','fSort'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', ()=>{
+    if(id === "fSort"){ sortF = document.getElementById(id).value; renderCards(); }
+    else { catF = document.getElementById('fCategory').value; statF = document.getElementById('fStatus').value; loadIssues(); }
+  });
+});
+const mapPanel = document.getElementById('mapPanel');
+const mapFullscreenBtn = document.getElementById('mapFullscreenBtn');
+function setMapFullscreen(on){
+  mapPanel.classList.toggle('fullscreen', on);
+  document.body.classList.toggle('map-fullscreen-active', on);
+  mapFullscreenBtn.textContent = on ? "✕ Exit fullscreen" : "⛶ Fullscreen";
+  setTimeout(()=>map.invalidateSize(), 80);
+}
+mapFullscreenBtn.addEventListener('click', ()=>setMapFullscreen(!mapPanel.classList.contains('fullscreen')));
+document.addEventListener('keydown', (e)=>{
+  if(e.key==="Escape" && mapPanel.classList.contains('fullscreen')) setMapFullscreen(false);
+});
+
+/* ================= STATUS TRACKING (citizen) ================= */
+const TRACK_STEPS = ['open', 'assigned', 'in_progress', 'resolved'];
+async function trackStatus(){
+  const id = document.getElementById('trackId').value.trim();
+  const wrap = document.getElementById('trackResult');
+  if(!id){ toast("Enter a complaint ID."); return; }
+  wrap.innerHTML = '<div class="hint" style="color:#9c927a;margin-top:10px">Looking up complaint #' + esc(id) + '...</div>';
+  try {
+    const data = await j('GET', '/status/' + id);
+    if(!data || data.error){ wrap.innerHTML = '<div class="hint" style="color:var(--signal-red);margin-top:10px">Complaint #' + esc(id) + ' not found.</div>'; return; }
+    trackedIssueId = data.issue ? data.issue.id : null;
+    const cat = data.category || 'other';
+    const stepIdx = TRACK_STEPS.indexOf(data.status);
+    const resolved = data.status === 'resolved';
+    const steps = TRACK_STEPS.map((s,i)=>
+      '<div style="flex:1;text-align:center"><div style="width:30px;height:30px;margin:0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid '+(i<=stepIdx||resolved?'var(--route-green)':'#3a3626')+';background:'+(i<=stepIdx||resolved?'var(--route-green)':'transparent')+';color:'+(i<=stepIdx||resolved?'#fff':'#665f47')+';font-size:12px;font-weight:700">'+(i<stepIdx||resolved?'✓':(i+1))+'</div><div style="font-size:10px;margin-top:3px;color:'+(i<=stepIdx?'var(--route-green)':'#665f47')+'">'+s.replace(/_/g,' ')+'</div></div>'
+    ).join('<div style="width:24px;height:2px;margin-top:14px;background:'+(stepIdx>0?'var(--route-green)':'#3a3626')+'"></div>');
+    let pois = '';
+    if(data.issue && data.issue.school_hospital_prox){
+      try {
+        const pl = JSON.parse(data.issue.school_hospital_prox || '[]');
+        if(pl.length) pois = '<div class="hint" style="margin-top:8px">🏫 near ' + esc(pl[0].name) + '</div>';
+      } catch(e){}
+    }
+    wrap.innerHTML = '<div style="margin-top:12px;padding:14px;background:#fbf9f2;color:var(--ink);border:1px dashed var(--line)">' +
+      '<div class="row" style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Category</span><b style="color:var(--signal-red)">' + esc(cat.replace(/_/g,' ')) + '</b></div>' +
+      '<div class="row" style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Severity</span><b style="color:var(--signal-red)">' + (data.severity||'—') + '/5</b></div>' +
+      '<div class="row" style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Department</span><b style="color:var(--signal-red)">' + esc(data.dept || DEPARTMENTS[cat] || 'Pending routing') + '</b></div>' +
+      (data.issue ? '<div class="row" style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Issue #' + data.issue.id + '</span><b style="color:var(--signal-red)">👥 ' + (data.issue.affected_count||1) + ' citizens</b></div>' : '') +
+      '<div style="font-size:.78rem;color:#3a3527;margin:6px 0 10px">' + esc(data.summary) + '</div>' +
+      '<div style="display:flex;align-items:flex-start">' + steps + '</div>' + pois +
+      (resolved ? '<div style="margin-top:10px;padding:8px;background:var(--route-green);color:#fff;text-align:center;font-weight:600">🎉 RESOLVED by the corporation</div>' : '') +
+      '</div>';
+  } catch(e){
+    wrap.innerHTML = '<div class="hint" style="color:var(--signal-red);margin-top:10px">Track error: ' + esc(e.message) + '</div>';
+  }
+}
+document.getElementById('trackBtn').addEventListener('click', trackStatus);
+document.getElementById('trackId').addEventListener('keydown', (e)=>{ if(e.key==="Enter") trackStatus(); });
+
+/* ================= PHOTO-VERIFY close-loop ================= */
+let verifyPhoto = null, trackedIssueId = null;
+document.getElementById('verifyDrop').addEventListener('click', ()=>document.getElementById('verifyInput').click());
+document.getElementById('verifyInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  verifyPhoto = file;
+  const reader = new FileReader();
+  reader.onload = ()=>{ document.getElementById('verifyPreviewWrap').innerHTML = '<img src="'+reader.result+'" style="max-width:100%;max-height:120px;margin-top:8px;border-radius:2px">'; };
+  reader.readAsDataURL(file);
+  document.getElementById('verifyBtn').disabled = false;
+});
+async function submitVerification(){
+  if(!verifyPhoto){ toast("Upload a photo first."); return; }
+  if(!trackedIssueId){ toast("Look up the complaint first to know which issue it belongs to."); return; }
+  const btn = document.getElementById('verifyBtn');
+  btn.disabled = true; btn.textContent = "Analyzing photo...";
+  try {
+    const fd = new FormData();
+    fd.append('image', verifyPhoto, verifyPhoto.name);
+    const r = await j('POST', '/issues/' + trackedIssueId + '/verify', fd);
+    const v = r.verdict === 'looks_resolved'
+      ? '<div style="margin-top:10px;padding:10px;background:var(--route-green);color:#fff;font-weight:600">✅ ' + esc(r.note || 'Looks resolved — the issue can stay closed.') + '</div>'
+      : '<div style="margin-top:10px;padding:10px;background:var(--signal-red);color:#fff;font-weight:600">⚠️ Still looks unresolved — citizens are notified again. (overlap ' + (r.fingerprint_overlap||0) + ')</div>';
+    document.getElementById('verifyResult').innerHTML = v +
+      '<div class="hint" style="margin-top:6px">Seen: ' + esc(r.category_seen||'—') + ' · severity ' + (r.severity_seen||'—') + '/5</div>';
+  } catch(e){
+    document.getElementById('verifyResult').innerHTML = '<div class="hint" style="color:var(--signal-red)">Verify error: ' + esc(e.message) + '</div>';
+  } finally {
+    btn.disabled = false; btn.textContent = "📷 Submit verification photo";
+  }
+}
+document.getElementById('verifyBtn').addEventListener('click', submitVerification);
+
+/* ================= STARFIELD (twinkling background) ================= */
+function initStars(){
+  const field = document.getElementById('starfield');
+  if(!field) return;
+  const count = window.innerWidth < 700 ? 35 : 60;
+  for(let i=0;i<count;i++){
+    const s = document.createElement('span');
+    s.className = 'star';
+    const size = (Math.random()*2.3 + 1.4).toFixed(1);
+    s.style.width = size + 'px';
+    s.style.height = size + 'px';
+    s.style.left = (Math.random()*100).toFixed(2) + 'vw';
+    s.style.top = (Math.random()*100).toFixed(2) + 'vh';
+    s.style.animationDuration = (1.8 + Math.random()*2.4).toFixed(2) + 's';
+    s.style.animationDelay = (Math.random()*2.6).toFixed(2) + 's';
+    field.appendChild(s);
+  }
+}
+
+initMap();
+setView('citizen');
+loadIssues();
+initStars();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+backend/data/
+backend/venv/
+*.egg-info/
+
+# Node
+node_modules/
+frontend/dist/
+npm-debug.log*
+
+# Env / secrets
+.env
+*.env
+!.env.example
+.env.local
+
+# OS / editor
+.DS_Store
+*.swp
+
+# Temp
+*.tmp
+data/

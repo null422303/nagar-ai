@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- OPTION B: Radar sweep — "AI spots the issue" -->
+  <defs>
+    <linearGradient id="b-radar" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2B7FF5"/><stop offset="1" stop-color="#2FA84F"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="10" fill="#0F141C"/>
+  <!-- radar rings -->
+  <circle cx="32" cy="32" r="26" fill="none" stroke="#3A3626" stroke-width="1.4"/>
+  <circle cx="32" cy="32" r="17" fill="none" stroke="#3A3626" stroke-width="1"/>
+  <circle cx="32" cy="32" r="9" fill="none" stroke="#3A3626" stroke-width="0.8"/>
+  <!-- sweep (marigold wedge) -->
+  <path d="M32 32 L58 15 A26 26 0 0 1 58 32 Z" fill="url(#b-radar)" opacity="0.35"/>
+  <line x1="32" y1="32" x2="57" y2="15" stroke="#E8A93A" stroke-width="2"/>
+  <!-- detected blips -->
+  <circle cx="46" cy="20" r="3" fill="#E8A93A"/>
+  <circle cx="24" cy="40" r="2.4" fill="#F2C96B"/>
+  <circle cx="38" cy="46" r="2" fill="#B23A2E"/>
+  <circle cx="22" cy="22" r="1.6" fill="#2FA84F"/>
+  <!-- crosshair center -->
+  <circle cx="32" cy="32" r="2.4" fill="#18150F" stroke="#E8A93A" stroke-width="1.4"/>
+</svg>

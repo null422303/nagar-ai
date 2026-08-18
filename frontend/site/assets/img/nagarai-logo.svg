@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <clipPath id="hazardClip">
+      <path d="M32 3 56 12v18c0 15-10 26-24 31C18 56 8 45 8 30V12Z"/>
+    </clipPath>
+  </defs>
+  <!-- ink shield -->
+  <rect x="0" y="0" width="64" height="64" fill="#18150f" rx="8"/>
+  <path d="M32 5 54 13v17c0 13.5-9 24-22 29C19 54 10 43.5 10 30V13Z" fill="#1f1c14" stroke="#3a3626" stroke-width="1.5"/>
+  <!-- hazard stripes -->
+  <g clip-path="url(#hazardClip)">
+    <rect x="14" y="8" width="36" height="48" fill="#e8a93a" transform="rotate(-45 32 32)"/>
+    <rect x="8" y="28" width="48" height="8" fill="#18150f" transform="rotate(-45 32 32)"/>
+    <rect x="14" y="18" width="36" height="8" fill="#18150f" transform="rotate(-45 32 32)"/>
+    <rect x="8" y="38" width="48" height="8" fill="#18150f" transform="rotate(-45 32 32)"/>
+  </g>
+  <!-- N monogram cut -->
+  <text x="32" y="41" font-family="Teko, Arial, sans-serif" font-size="34" font-weight="700"
+        fill="#18150f" text-anchor="middle" dominant-baseline="central">N</text>
+  <text x="33.5" y="39.5" font-family="Teko, Arial, sans-serif" font-size="34" font-weight="700"
+        fill="#e8a93a" text-anchor="middle" dominant-baseline="central">N</text>
+</svg>

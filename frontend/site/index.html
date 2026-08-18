@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NAGAR AI — Ward Control Room</title>
+<link rel="icon" type="image/svg+xml" href="assets/img/logo-b-radar.svg">
+<link rel="apple-touch-icon" href="assets/img/logo-b-radar.svg">
+<meta name="description" content="NAGAR AI ward control room — file a complaint by voice, photo or text; track its status; or run the live ward board with dedup, priority scoring and a ward map.">
+<link rel="stylesheet" href="assets/fonts/fonts.css">
+<link rel="stylesheet" href="assets/css/leaflet.min.css">
+<style>
+  :root{
+    --ink:#18150f;
+    --ink-deep:#0f0c07;
+    --ink-raise:#1f1c14;
+    --ink-bar:#141210;
+    --line:#33301f;
+    --line-soft:#3a3626;
+    --paper:#e7e1ce;
+    --muted:#a89e83;
+    --faint:#8a8167;
+    --marigold:#e8a93a;
+    --marigold-dk:#b9822a;
+    --signal-red:#b23a2e;
+    --route-green:#3f6b4a;
+    --canal:#3e5c66;
+    --card:#f2ede0;
+    --card-line:#d7d0b6;
+    --cat-pothole:#E8503A;
+    --cat-garbage:#2FA84F;
+    --cat-streetlight:#E0A300;
+    --cat-waterlogging:#2B7FF5;
+    --cat-other:#5A6472;
+    --disp:'Teko',sans-serif;
+    --body:'IBM Plex Sans',sans-serif;
+    --mono:'IBM Plex Mono',monospace;
+    --ring:2px solid var(--marigold);
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:auto;}
+  body{
+    margin:0;
+    background:var(--ink);
+    background-image:
+      radial-gradient(1100px 640px at 50% -12%, rgba(232,169,58,.06), transparent 62%),
+      repeating-linear-gradient(0deg, rgba(231,225,206,.022) 0 1px, transparent 1px 46px),
+      repeating-linear-gradient(90deg, rgba(231,225,206,.022) 0 1px, transparent 1px 46px);
+    color:var(--paper);
+    font-family:var(--body);
+    font-size:14px;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+  }
+  .disp{font-family:var(--disp);}
+  .mono{font-family:var(--mono);}
+  h1,h2,h3,h4{font-family:var(--disp); font-weight:600; letter-spacing:.02em; margin:0;}
+  p{margin:0;}
+  button{font-family:inherit;}
+  :focus{outline:none;}
+  :focus-visible{outline:var(--ring); outline-offset:2px; border-radius:2px;}
+  ::selection{background:var(--marigold); color:var(--ink);}
+  ::-webkit-scrollbar{width:10px; height:10px;}
+  ::-webkit-scrollbar-track{background:var(--ink-deep);}
+  ::-webkit-scrollbar-thumb{background:#3a3626; border-radius:5px;}
+  .skip-link{position:fixed; top:-48px; left:16px; z-index:3000; background:var(--marigold); color:var(--ink); font-weight:700; padding:10px 16px; border-radius:2px;}
+  .skip-link:focus{top:10px;}
+  [hidden]{display:none !important;}
+
+  /* hazard strip */
+  .hazard{
+    height:6px;
+    background:repeating-linear-gradient(135deg,var(--marigold) 0 14px, var(--ink) 14px 28px);
+  }
+
+  /* header */
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between; gap:20px;
+    padding:14px 28px;
+    background:linear-gradient(180deg,#1d1a13,var(--ink));
+    border-bottom:1px solid var(--line);
+  }
+  .brand{display:flex; align-items:center; gap:14px; min-width:0;}
+  .brand-mark{
+    flex:0 0 auto; width:40px; height:40px; border-radius:6px; overflow:hidden;
+    border:1px solid var(--line-soft);
+    background:var(--ink);
+    box-shadow:0 0 0 1px rgba(232,169,58,.18);
+  }
+  .brand-mark img{display:block; width:100%; height:100%; object-fit:cover;}
+  .brand-id{min-width:0;}
+  .brand-name{font-family:var(--disp); font-size:2.1rem; line-height:.95; color:var(--marigold); letter-spacing:.03em;}
+  .brand-tag{font-size:.62rem; letter-spacing:.16em; text-transform:uppercase; color:var(--faint); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .hdr-right{display:flex; align-items:center; gap:18px; flex-wrap:wrap;}
+  .hdr-stat{display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;}
+  .hdr-stat .k{font-size:.6rem; letter-spacing:.14em; text-transform:uppercase; color:var(--faint);}
+  .hdr-stat b{font-family:var(--mono); font-size:1.05rem; color:var(--paper);}
+  .hdr-divider{width:1px; height:30px; background:var(--line);}
+  .hdr-clock{display:flex; align-items:baseline; gap:8px;}
+  .hdr-clock .k{font-size:.6rem; letter-spacing:.14em; color:var(--faint);}
+  .hdr-clock b{font-family:var(--mono); font-size:.95rem; color:var(--paper); font-weight:500;}
+  .chip{display:inline-flex; align-items:center; gap:7px; padding:5px 10px; border-radius:20px; font-size:.62rem; font-weight:700; letter-spacing:.12em; border:1px solid var(--line-soft); color:var(--muted);}
+  .chip .dot{width:7px; height:7px; border-radius:50%; background:var(--muted);}
+  .chip--live{color:var(--route-green); border-color:rgba(63,107,74,.5);}
+  .chip--live .dot{background:var(--route-green); box-shadow:0 0 0 rgba(63,107,74,.6); animation:pulseDot 1.8s infinite;}
+  @keyframes pulseDot{0%{box-shadow:0 0 0 0 rgba(63,107,74,.55);}70%{box-shadow:0 0 0 9px rgba(63,107,74,0);}100%{box-shadow:0 0 0 0 rgba(63,107,74,0);}}
+  .chip--demo{color:var(--marigold); border-color:rgba(232,169,58,.5);}
+  .chip--demo .dot{background:var(--marigold); animation:pulseDot 1.8s infinite;}
+
+  /* view bar */
+  .viewbar{
+    display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;
+    padding:10px 28px;
+    background:var(--ink-bar);
+    border-bottom:1px solid var(--line);
+  }
+  .view-switch{display:flex; gap:4px; padding:4px; border-radius:4px; background:var(--ink-deep); border:1px solid var(--line);}
+  .view-btn{
+    display:inline-flex; align-items:center; gap:8px;
+    padding:9px 16px; min-height:40px;
+    border:none; background:transparent; cursor:pointer;
+    color:var(--muted); font-weight:600; font-size:.78rem; letter-spacing:.02em;
+    border-radius:3px; transition:background .15s ease,color .15s ease;
+  }
+  .view-btn svg{width:15px; height:15px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; flex:0 0 auto;}
+  .view-btn:hover{color:var(--paper); background:rgba(231,225,206,.07);}
+  .view-btn.is-active{background:var(--marigold); color:var(--ink);}
+  .view-btn.is-active:hover{background:var(--marigold); color:var(--ink);}
+  .view-btn .vlabel{display:inline-flex; align-items:baseline; gap:3px; line-height:1;}
+  .view-btn .vt{font-weight:600;}
+  .view-btn .vs{font-size:.62rem; font-weight:500; letter-spacing:.08em; text-transform:uppercase; color:inherit; opacity:.75; white-space:nowrap;}
+  /* bracket framing around each view button */
+  .view-btn::before{content:"["; opacity:.55; transition:opacity .15s ease; line-height:1; align-self:center;}
+  .view-btn::after{content:"]"; opacity:.55; transition:opacity .15s ease; line-height:1; align-self:center;}
+  .view-btn.is-active::before,.view-btn.is-active::after{opacity:1; color:var(--ink);}
+  .view-note{font-size:.68rem; color:var(--faint); letter-spacing:.03em; max-width:420px;}
+
+  /* layout */
+  .main{padding:22px 28px 56px; max-width:1320px; margin:0 auto;}
+  .view{display:block;}
+  body[data-view="citizen"] #citizenView, body[data-view="status"] #statusView, body[data-view="admin"] #adminView{display:block;}
+  #statusView,#adminView{display:none;}
+  body[data-view="citizen"] #adminView, body[data-view="citizen"] #statusView,
+  body[data-view="status"] #citizenView, body[data-view="status"] #adminView,
+  body[data-view="admin"] #citizenView, body[data-view="admin"] #statusView{display:none;}
+  body[data-view="citizen"] .main, body[data-view="status"] .main{max-width:680px;}
+  body[data-view="admin"] .main{max-width:1320px;}
+
+  /* demo banner */
+  .demo-banner{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    background:rgba(232,169,58,.1); border:1px solid rgba(232,169,58,.35);
+    color:var(--marigold); padding:10px 14px; border-radius:3px;
+    font-size:.76rem; margin-bottom:18px; letter-spacing:.02em;
+  }
+  .demo-banner svg{width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:1.8; flex:0 0 auto;}
+
+  /* KPI strip */
+  .kpis{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px;}
+  .kpi{
+    background:var(--ink-raise); border:1px solid var(--line); border-radius:3px;
+    padding:14px 16px; position:relative; overflow:hidden;
+  }
+  .kpi::before{content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent,var(--marigold));}
+  .kpi .num{font-family:var(--disp); font-size:2rem; line-height:1; color:var(--paper); font-weight:600;}
+  .kpi .num b{color:var(--accent,var(--marigold)); font-weight:600;}
+  .kpi .lab{font-family:var(--mono); font-size:.6rem; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin-top:6px;}
+  .kpi--red{--accent:var(--signal-red);}
+  .kpi--amber{--accent:var(--marigold);}
+  .kpi--green{--accent:var(--route-green);}
+  .kpi--canal{--accent:var(--canal);}
+
+  /* admin grid */
+  .board-grid{display:grid; grid-template-columns:minmax(0,1fr) 400px; gap:20px; align-items:start;}
+  .mapcol{position:sticky; top:14px;}
+  @media (max-width:1180px){
+    .board-grid{grid-template-columns:1fr;}
+    .mapcol{position:static;}
+  }
+
+  /* panels */
+  .panel{background:var(--ink-raise); border:1px solid var(--line); border-radius:3px; margin-bottom:18px;}
+  .panel-head{
+    display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+    padding:14px 16px 12px; border-bottom:1px solid var(--line);
+  }
+  .panel-head h2{font-size:1.15rem; color:var(--paper); letter-spacing:.06em; text-transform:uppercase;}
+  .panel-head h2 .tl{color:var(--marigold);}
+  .panel-head .sub{font-family:var(--mono); font-size:.6rem; letter-spacing:.12em; color:var(--faint); text-transform:uppercase;}
+  .panel-body{padding:14px 16px 16px;}
+
+  /* ticket */
+  .ticket{
+    background:var(--card); color:var(--ink); border-radius:4px;
+    position:relative; padding:0 22px;
+    border:1px solid #c9c0a2;
+  }
+  .ticket::before,.ticket::after{
+    content:""; position:absolute; left:0; right:0; height:16px;
+    background-image:radial-gradient(circle at 11px 8px, var(--ink) 7px, transparent 8px);
+    background-size:22px 16px; background-repeat:repeat-x;
+  }
+  .ticket::before{top:-8px;}
+  .ticket::after{bottom:-8px;}
+  .ticket-head{
+    display:flex; align-items:flex-end; justify-content:space-between; gap:12px;
+    padding:22px 0 14px; border-bottom:2px dashed var(--card-line);
+  }
+  .ticket-title{font-size:1.7rem; color:var(--signal-red); letter-spacing:.03em; line-height:1;}
+  .ticket-sub{font-size:.68rem; color:#6b6350; letter-spacing:.1em; text-transform:uppercase; margin-top:6px;}
+  .ticket-no{font-family:var(--mono); font-size:.68rem; color:#6b6350; letter-spacing:.08em; white-space:nowrap;}
+  .ticket-body{padding:18px 0 6px;}
+  .ticket-foot{padding:14px 0 26px;}
+
+  /* tabs */
+  .tabs{display:flex; gap:6px;}
+  .tabs button{
+    flex:1; display:inline-flex; align-items:center; justify-content:center; gap:7px;
+    padding:10px 6px; min-height:44px;
+    border:1px solid var(--card-line); background:transparent; cursor:pointer;
+    color:#6b6350; font-family:var(--body); font-size:.8rem; font-weight:600;
+    border-radius:3px; transition:background .15s,color .15s,border-color .15s;
+  }
+  .tabs button svg{width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round;}
+  .tabs button:hover{border-color:var(--ink); color:var(--ink);}
+  .tabs button.is-active{background:var(--ink); color:var(--marigold); border-color:var(--ink);}
+
+  /* fields */
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-family:var(--mono); font-size:.62rem; text-transform:uppercase; letter-spacing:.12em; color:#6b6350; margin-bottom:6px;}
+  textarea,input[type=text],input[type=number],input[type=password],select{
+    width:100%; padding:10px 11px; border:1px solid var(--card-line); background:#fbf9f2;
+    color:var(--ink); font-family:var(--body); font-size:.88rem; border-radius:3px;
+  }
+  textarea{min-height:84px; resize:vertical;}
+  select{width:auto;}
+  input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none; border-color:var(--marigold-dk); box-shadow:0 0 0 2px rgba(232,169,58,.35);}
+  .hint{font-size:.68rem; color:#6b6350; margin-top:5px; line-height:1.5;}
+  .locrow{display:flex; gap:8px;}
+  .locrow input{flex:1; min-width:0;}
+  .btn-row{display:flex; gap:8px;}
+  .file-drop{
+    border:1.5px dashed var(--card-line); border-radius:3px; padding:16px; text-align:center;
+    font-size:.78rem; color:#6b6350; cursor:pointer; background:#fbf9f2;
+    transition:border-color .15s,background .15s;
+  }
+  .file-drop:hover{border-color:var(--ink); background:#fff;}
+  .file-drop img{max-width:100%; max-height:130px; margin-top:10px; border-radius:3px; display:block;}
+  .mic-row{display:flex; gap:8px; align-items:center;}
+  .mic-row select{flex-shrink:0;}
+  .mic-status{font-size:.72rem; color:#6b6350; margin-top:8px; min-height:18px; line-height:1.45;}
+  .mic-dot{display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--signal-red); margin-right:6px; animation:blink 1s infinite;}
+  @keyframes blink{0%,100%{opacity:1;}50%{opacity:.15;}}
+
+  /* buttons */
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    padding:11px 18px; min-height:44px;
+    background:var(--signal-red); color:#f2ede0; border:none;
+    font-family:var(--body); font-weight:600; font-size:.85rem;
+    cursor:pointer; border-radius:3px; letter-spacing:.02em;
+    transition:background .15s ease,color .15s ease,border-color .15s ease;
+  }
+  .btn svg{width:15px; height:15px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; flex:0 0 auto;}
+  .btn:hover{background:#c54536;}
+  .btn:active{background:#9d3025;}
+  .btn.full{width:100%;}
+  .btn--ghost{background:transparent; border:1px solid var(--card-line); color:var(--ink);}
+  .btn--ghost:hover{background:rgba(24,21,15,.06); border-color:var(--ink); color:var(--ink);}
+  .btn--amber{background:var(--marigold); color:var(--ink);}
+  .btn--amber:hover{background:#f0b84f; color:var(--ink);}
+  .btn--green{background:var(--route-green); color:#f2ede0;}
+  .btn--green:hover{background:#487e57;}
+  .btn--dark{background:var(--ink); color:var(--marigold); border:1px solid var(--line-soft);}
+  .btn--dark:hover{background:#241f15; color:var(--marigold);}
+  .btn:disabled{opacity:.45; cursor:not-allowed; pointer-events:none;}
+
+  /* result stamp */
+  .stampbox{
+    margin-top:18px; padding:12px; background:#f7f4e9; border:1px dashed var(--card-line);
+    font-size:.78rem; display:none;
+  }
+  .stampbox.show{display:block; animation:fadeUp .25s ease;}
+  @keyframes fadeUp{from{opacity:0; transform:translateY(6px);}to{opacity:1; transform:none;}}
+  .stampbox .row{display:flex; justify-content:space-between; gap:10px; margin-bottom:4px;}
+  .stampbox .row b{color:var(--signal-red); text-align:right;}
+  .stampbox .row .mono{color:var(--ink);}
+
+  /* intake log */
+  .log{margin-top:18px;}
+  .log-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;}
+  .log-head h3{font-family:var(--mono); font-size:.66rem; text-transform:uppercase; letter-spacing:.14em; color:#6b6350;}
+  .log-item{
+    font-family:var(--mono); font-size:.7rem; border-left:3px solid var(--marigold-dk);
+    padding:5px 10px; margin-bottom:6px; background:#fbf9f2; color:var(--ink); line-height:1.5;
+  }
+  .log-item .t{color:#6b6350;}
+
+  /* cards */
+  .toolbar{display:flex; gap:8px; flex-wrap:wrap;}
+  .cards{display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); gap:12px;}
+  .ccard{
+    background:var(--ink-raise); border:1px solid var(--line); border-radius:3px;
+    padding:14px 15px 13px; position:relative; overflow:hidden;
+    border-left:4px solid var(--cat-other);
+    transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease;
+  }
+  .ccard:hover{transform:translateY(-2px); border-color:var(--line-soft);}
+  .ccard.cat-pothole{border-left-color:var(--cat-pothole);}
+  .ccard.cat-garbage{border-left-color:var(--cat-garbage);}
+  .ccard.cat-streetlight{border-left-color:var(--cat-streetlight);}
+  .ccard.cat-waterlogging{border-left-color:var(--cat-waterlogging);}
+  .ccard.cat-other{border-left-color:var(--cat-other);}
+  .ccard .top{display:flex; justify-content:space-between; align-items:flex-start; gap:10px;}
+  .ccard h4{margin:0; font-size:1.05rem; color:var(--paper);}
+  .ccard .meta{font-family:var(--mono); font-size:.6rem; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); margin-top:3px;}
+  .ccard .id{font-family:var(--mono); font-size:.6rem; color:var(--faint); letter-spacing:.08em; margin-top:6px;}
+  .ccard p{font-size:.8rem; margin:9px 0; line-height:1.5; color:var(--muted);}
+  .stamp{
+    flex:0 0 auto; width:52px; height:52px; border-radius:50%;
+    border:2px solid var(--marigold); color:var(--marigold);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    transform:rotate(-8deg); font-family:var(--mono); line-height:1; opacity:.95;
+  }
+  .stamp b{font-size:1.1rem;}
+  .stamp span{font-size:.48rem; letter-spacing:.08em; text-transform:uppercase; margin-top:2px;}
+  .badges{display:flex; gap:6px; flex-wrap:wrap; margin:9px 0;}
+  .badge{font-size:.62rem; padding:3px 9px; border-radius:11px; background:#2a2620; color:var(--muted); text-transform:uppercase; letter-spacing:.05em;}
+  .badge--open{background:rgba(178,58,46,.18); color:#e88a7c; border:1px solid rgba(178,58,46,.4);}
+  .badge--progress{background:rgba(232,169,58,.16); color:var(--marigold); border:1px solid rgba(232,169,58,.4);}
+  .badge--assigned{background:rgba(47,127,245,.16); color:#7fb2f5; border:1px solid rgba(47,127,245,.45);}
+  .badge--resolved{background:rgba(63,107,74,.2); color:#7fbf8f; border:1px solid rgba(63,107,74,.45);}
+  .ccard .foot{display:flex; justify-content:space-between; align-items:center; margin-top:10px; gap:8px; flex-wrap:wrap; border-top:1px solid var(--line); padding-top:10px;}
+  .sla{font-family:var(--mono); font-size:.66rem; color:var(--faint);}
+  .sla.breach{color:#e88a7c; font-weight:700;}
+  .ccard .foot .btn{min-height:36px; padding:7px 12px; font-size:.72rem;}
+  .ccard .foot .actions{display:flex; gap:6px;}
+
+  /* formula + dedup */
+  .formula-strip{
+    font-family:var(--mono); background:var(--ink-bar); border:1px solid var(--line-soft);
+    border-radius:3px; padding:16px; font-size:.82rem; line-height:1.8; color:var(--paper);
+  }
+  .formula-strip .f{color:var(--marigold); font-size:.95rem;}
+  .formula-strip .note{color:var(--faint); font-size:.72rem; margin-top:10px; line-height:1.7;}
+  .formula-strip .note .hl{color:var(--marigold-dk);}
+  .worked{margin-top:12px; padding-top:10px; border-top:1px dashed var(--line-soft); font-size:.76rem; color:var(--muted);}
+  .cluster-explain{background:var(--ink-bar); border:1px solid var(--line-soft); border-radius:3px; padding:12px; margin-bottom:10px; font-size:.76rem; color:var(--muted);}
+  .cluster-explain .ch{display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; font-family:var(--mono); color:var(--marigold); margin-bottom:6px; font-size:.72rem;}
+  .cluster-explain .pair{margin-top:4px; padding-left:9px; border-left:2px solid var(--line-soft); color:var(--faint); font-family:var(--mono); font-size:.68rem;}
+  .cluster-explain .pair b{color:var(--paper);}
+  .score-hi{color:#7fbf8f; font-weight:700;}
+  .score-lo{color:var(--faint);}
+
+  /* map */
+  .panel--map{padding-bottom:0; overflow:hidden; margin-bottom:0;}
+  .panel--map .panel-head{padding-bottom:12px; position:relative; z-index:700;}
+  #mapPanel.fullscreen .panel-head{z-index:800;}
+  .map-legend{display:flex; gap:14px; flex-wrap:wrap; align-items:center; padding:10px 16px; border-top:1px solid var(--line);}
+  .legend-item{display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:.6rem; letter-spacing:.08em; text-transform:uppercase; color:var(--faint);}
+  .legend-dot{width:9px; height:9px; border-radius:50%;}
+  #map{height:560px; width:100%; background:var(--ink-deep);}
+  @media (max-width:1180px){ #map{height:420px;} }
+  .map-panel-body{position:relative;}
+  .map-filters{display:flex; gap:8px; flex-wrap:wrap; padding:0 16px 12px; position:relative; z-index:700;}
+  .map-filters select{background:var(--ink-bar); color:var(--paper); border-color:var(--line-soft); position:relative; z-index:1;}
+  .map-filters select option{background:var(--ink-bar); color:var(--paper);}
+  .map-filters select:focus-visible{box-shadow:0 0 0 2px rgba(232,169,58,.35); border-color:var(--marigold-dk);}
+  #mapPanel.fullscreen{position:fixed !important; top:0 !important; left:0 !important; right:0 !important; bottom:0 !important; width:100vw !important; height:100vh !important; max-height:100vh !important; z-index:1200; margin:0; border-radius:0; display:flex; flex-direction:column; background:var(--ink-raise); overflow:hidden;}
+  #mapPanel.fullscreen .panel-head{flex-shrink:0;}
+  #mapPanel.fullscreen #map{flex:1 1 auto; height:auto; min-height:0; width:100%; position:relative; z-index:1;}
+  #mapPanel.fullscreen .panel-head{flex-shrink:0;}
+  #mapPanel.fullscreen .map-legend{flex-shrink:0;}
+  #mapPanel.fullscreen .map-filters{display:none !important;}
+  body.map-fullscreen-active{overflow:hidden;}
+  .leaflet-container{font-family:var(--body);}
+  .leaflet-popup-content-wrapper{background:var(--card); color:var(--ink); border-radius:3px; font-size:12px;}
+  .leaflet-popup-content{font-family:var(--body); margin:10px 12px;}
+  .leaflet-popup-content b{text-transform:capitalize;}
+  .pulse-marker{width:16px; height:16px; border-radius:50%; background:var(--signal-red); border:2px solid #fff; box-shadow:0 0 0 rgba(178,58,46,.6); animation:pulseMarker 1.4s infinite;}
+  @keyframes pulseMarker{0%{box-shadow:0 0 0 0 rgba(178,58,46,.55);}70%{box-shadow:0 0 0 22px rgba(178,58,46,0);}100%{box-shadow:0 0 0 0 rgba(178,58,46,0);}}
+
+  /* track */
+  .track-steps{display:flex; align-items:center; margin:14px 0 4px;}
+  .track-step{flex:1; text-align:center; min-width:0;}
+  .track-step .dot{width:30px; height:30px; margin:0 auto; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid var(--card-line); background:transparent; color:#6b6350; font-family:var(--mono); font-size:11px; font-weight:700;}
+  .track-step.done .dot{border-color:var(--route-green); background:var(--route-green); color:#fff;}
+  .track-step .lbl{font-family:var(--mono); font-size:9px; margin-top:4px; color:#6b6350; text-transform:uppercase; letter-spacing:.06em;}
+  .track-step.done .lbl{color:var(--route-green);}
+  .track-step .lbl::first-letter{text-transform:uppercase;}
+  .track-conn{width:22px; height:2px; margin-top:14px; background:var(--card-line); flex:0 0 auto;}
+  .track-conn.done{background:var(--route-green);}
+  .track-detail{background:#fbf9f2; border:1px dashed var(--card-line); padding:14px; margin-top:14px; color:var(--ink); font-size:.8rem;}
+  .track-detail .row{display:flex; justify-content:space-between; gap:10px; margin-bottom:4px;}
+  .track-detail .row b{color:var(--signal-red); text-align:right;}
+  .track-detail .sum{color:#3a3527; margin:8px 0 12px; font-size:.8rem;}
+  .resolve-banner{margin-top:12px; padding:9px; background:var(--route-green); color:#fff; text-align:center; font-weight:600; font-size:.8rem; border-radius:3px;}
+  .unresolved-banner{margin-top:12px; padding:9px; background:var(--signal-red); color:#fff; text-align:center; font-weight:600; font-size:.8rem; border-radius:3px;}
+
+  /* toasts */
+  .toast-wrap{position:fixed; bottom:18px; right:18px; z-index:999; display:flex; flex-direction:column; gap:8px; max-width:340px;}
+  .toast{
+    background:var(--ink-raise); color:var(--paper); border:1px solid var(--line-soft);
+    border-left:4px solid var(--route-green); border-radius:3px;
+    padding:11px 14px; font-size:.78rem; line-height:1.5;
+    box-shadow:0 8px 22px rgba(0,0,0,.5); animation:toastIn .2s ease;
+  }
+  .toast--err{border-left-color:var(--signal-red);}
+  @keyframes toastIn{from{opacity:0; transform:translateY(8px);}to{opacity:1; transform:none;}}
+
+  /* modal */
+  .modal-overlay{position:fixed; inset:0; z-index:1400; background:rgba(10,9,6,.72); backdrop-filter:blur(2px); display:none; align-items:center; justify-content:center; padding:20px;}
+  .modal-overlay.show{display:flex;}
+  .modal-box{background:var(--card); color:var(--ink); width:100%; max-width:330px; padding:0 22px 22px; border-radius:4px; position:relative; overflow:hidden;}
+  .modal-box::before{content:""; position:absolute; top:0; left:0; right:0; height:4px; background:repeating-linear-gradient(135deg,var(--marigold) 0 9px, var(--ink) 9px 18px);}
+  .modal-box h3{font-size:1.6rem; margin:20px 0 2px; color:var(--signal-red);}
+  .modal-box .sub{font-size:.68rem; color:#6b6350; margin-bottom:16px; text-transform:uppercase; letter-spacing:.08em;}
+  .modal-box input{margin-bottom:6px;}
+  .modal-err{color:var(--signal-red); font-size:.72rem; min-height:16px; margin-bottom:6px; font-weight:600;}
+  .modal-actions{display:flex; gap:8px; justify-content:flex-end; margin-top:12px;}
+  .modal-hint{font-family:var(--mono); font-size:.66rem; color:#6b6350; margin-top:10px;}
+
+  /* responsive */
+  @media (max-width:980px){
+    .topbar{flex-wrap:wrap;}
+    .brand-tag{white-space:normal;}
+    .kpis{grid-template-columns:repeat(2,1fr);}
+  }
+  @media (max-width:720px){
+    .topbar{padding:12px 16px;}
+    .viewbar{padding:10px 16px;}
+    .main{padding:16px 16px 44px;}
+    .hdr-right{gap:10px;}
+    .hdr-divider{display:none;}
+    .view-btn{padding:9px 12px; font-size:.72rem;}
+    .view-btn .vs{display:none;}
+    .locrow{flex-direction:column;}
+    .mic-row{flex-direction:column; align-items:stretch;}
+    .kpis{grid-template-columns:1fr 1fr; gap:8px;}
+    .ticket{padding:0 16px;}
+    .ticket-head{padding:18px 0 12px;}
+    .toast-wrap{left:16px; right:16px; bottom:14px;}
+  }
+
+  /* ============================================================
+     SUBTLE MOTION SYSTEM — smooth, GPU-only, reduced-motion safe
+     ============================================================ */
+  :root{
+    --ease-out:cubic-bezier(.16,1,.3,1);
+    --ease-spring:cubic-bezier(.34,1.56,.64,1);
+    --dur-fast:180ms; --dur-med:320ms; --dur-slow:520ms;
+  }
+
+  /* view swap — fade + slight rise */
+  /* no persistent will-change on .view — it creates a containing block that breaks position:fixed fullscreen */
+  #citizenView,#statusView,#adminView{animation:viewIn var(--dur-med) var(--ease-out);}
+  .view.view-in{animation:viewIn var(--dur-med) var(--ease-out);}
+  .tabpane:not([hidden]){animation:viewIn var(--dur-med) var(--ease-out);}
+  @keyframes viewIn{from{opacity:0; transform:translateY(8px);}to{opacity:1; transform:none;}}
+
+  /* cluster cards — staggered reveal */
+  .ccard{opacity:0; transform:translateY(10px);
+    animation:cardIn var(--dur-med) var(--ease-out) forwards;}
+  .ccard:nth-child(1){animation-delay:0ms;}
+  .ccard:nth-child(2){animation-delay:40ms;}
+  .ccard:nth-child(3){animation-delay:80ms;}
+  .ccard:nth-child(4){animation-delay:120ms;}
+  .ccard:nth-child(5){animation-delay:160ms;}
+  .ccard:nth-child(6){animation-delay:200ms;}
+  .ccard:nth-child(n+7){animation-delay:240ms;}
+  @keyframes cardIn{from{opacity:0; transform:translateY(10px);}to{opacity:1; transform:none;}}
+
+  /* card hover — gentle lift + border glow */
+  .ccard{transition:transform var(--dur-med) var(--ease-out);}
+  .ccard:hover{transform:translateY(-3px);}
+
+  /* KPI numbers — smooth count-up target (pop) */
+  .kpi .num{transition:color var(--dur-fast) var(--ease-out);}
+
+  /* buttons — subtle press + focus pulse */
+  .btn{transition:transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast), background var(--dur-fast), filter var(--dur-fast);}
+  .btn:active{transform:translateY(1px) scale(.99);}
+  .btn:focus-visible{animation:focusPulse 1s var(--ease-out) infinite;}
+  @keyframes focusPulse{0%,100%{box-shadow:0 0 0 0 rgba(232,169,58,.5);}50%{box-shadow:0 0 0 6px rgba(232,169,58,0);}}
+
+  /* view switch buttons — active slide underline */
+  .view-switch{position:relative;}
+  .view-btn{transition:color var(--dur-fast) var(--ease-out), background var(--dur-fast);}
+
+  /* receipt / panels — soft entrance */
+  .receipt,.panel{animation:riseIn var(--dur-med) var(--ease-out);}
+  @keyframes riseIn{from{opacity:0; transform:translateY(6px);}to{opacity:1; transform:none;}}
+
+  /* toasts — smoother slide */
+  .toast{animation:toastIn var(--dur-med) var(--ease-spring);}
+
+  /* ambient radar glow behind admin map (very subtle) — disabled in fullscreen */
+  .map-panel-glow{position:relative; overflow:hidden;}
+  .map-panel-glow::after{
+    content:""; position:absolute; inset:-60% -20%; z-index:0; pointer-events:none;
+    background:radial-gradient(circle at 50% 50%, rgba(232,169,58,.06), transparent 60%);
+    animation:radarGlow 6s ease-in-out infinite;
+  }
+  #mapPanel.fullscreen.map-panel-glow::after{display:none;}
+  @keyframes radarGlow{0%,100%{opacity:.4; transform:scale(1);}50%{opacity:1; transform:scale(1.04);}}
+
+  /* live dot — smooth breathing */
+  .chip--live .dot,.chip--demo .dot{animation:pulseDot 1.8s ease-in-out infinite;}
+
+  /* smooth scroll + focus ring polish */
+  html{scroll-behavior:smooth;}
+
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{
+      animation-duration:.01ms !important;
+      animation-iteration-count:1 !important;
+      transition-duration:.01ms !important;
+      scroll-behavior:auto !important;
+    }
+    .ccard{opacity:1 !important; transform:none !important;}
+  }
+</style>
+</head>
+<body data-view="citizen">
+
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="hazard" aria-hidden="true"></div>
+
+<header class="topbar" data-od-id="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"><img src="assets/img/logo-b-radar.svg" alt="" width="40" height="40"></span>
+    <div class="brand-id">
+      <h1 class="brand-name">NAGAR AI</h1>
+      <p class="brand-tag">Ward Control Room · Chennai Corp Demo Zone</p>
+    </div>
+  </div>
+  <div class="hdr-right">
+    <div class="hdr-stat">
+      <span class="k">Citizens affected</span><b id="hdrPeople">—</b>
+      <span class="k">Open</span><b id="hdrOpen">—</b>
+    </div>
+    <div class="hdr-divider" aria-hidden="true"></div>
+    <div class="hdr-clock">
+      <span class="k">IST</span><b id="hdrClock">--:--:--</b>
+    </div>
+    <span class="chip chip--live" id="liveChip"><span class="dot" aria-hidden="true"></span><span id="liveChipTxt">LIVE</span></span>
+  </div>
+</header>
+
+<nav class="viewbar" data-od-id="viewbar" aria-label="Primary">
+  <div class="view-switch" role="tablist">
+    <button class="view-btn is-active" data-view="citizen" data-od-id="view-citizen" role="tab" aria-selected="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-3.3 0-7 1.7-7 4v1h14v-1c0-2.3-3.7-4-7-4z"/></svg>
+      <span class="vlabel"><span class="vt">Citizen</span><span class="vs">— File a complaint</span></span>
+    </button>
+    <button class="view-btn" data-view="status" data-od-id="view-status" role="tab" aria-selected="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg>
+      <span class="vlabel"><span class="vt">Track</span><span class="vs">— status</span></span>
+    </button>
+    <button class="view-btn" data-view="admin" data-od-id="view-admin" role="tab" aria-selected="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.6-3 8.4-7 10-4-1.6-7-5.4-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg>
+      <span class="vlabel"><span class="vt">Admin</span><span class="vs">— Ward control room</span></span>
+    </button>
+  </div>
+  <p class="view-note" id="viewNote">Public intake — anyone can file an issue.</p>
+</nav>
+
+<main class="main" id="main">
+  <div class="demo-banner" id="demoBanner" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.6-3 8.4-7 10-4-1.6-7-5.4-7-10V6z"/><path d="M12 8v5"/><circle cx="12" cy="16.5" r=".5"/></svg>
+    <span id="demoBannerTxt">OFFLINE DEMO — live server unreachable. Showing simulated ward data; every module still works.</span>
+  </div>
+
+  <!-- CITIZEN INTAKE -->
+  <section id="citizenView" class="view" data-od-id="intake">
+    <article class="ticket">
+      <div class="ticket-head">
+        <div>
+          <h2 class="ticket-title">File a complaint</h2>
+          <p class="ticket-sub">Voice · Photo · Text — any language</p>
+        </div>
+        <span class="ticket-no" id="ticketNo">TKT-0000</span>
+      </div>
+
+      <div class="ticket-body">
+        <div class="tabs" id="intakeTabs" role="tablist">
+          <button class="is-active" data-tab="text" role="tab" aria-selected="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg>
+            Text rant
+          </button>
+          <button data-tab="voice" role="tab" aria-selected="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+            Voice note
+          </button>
+          <button data-tab="photo" role="tab" aria-selected="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+            Photo
+          </button>
+        </div>
+
+        <div id="tab-text" class="tabpane">
+          <div class="field" style="margin-top:16px;">
+            <label for="inText">Type it however you'd say it</label>
+            <textarea id="inText" placeholder="e.g. Anna Nagar 2nd avenue-la streetlight konjo naala vela seyala, romba dangerous night-la..."></textarea>
+            <div class="hint">Tamil, Hindi, English or mixed — the extractor reads all of it.</div>
+          </div>
+        </div>
+
+        <div id="tab-voice" class="tabpane" hidden>
+          <div class="field">
+            <label for="micBtn">Record voice note</label>
+            <div class="mic-row">
+              <button class="btn btn--dark full" id="micBtn" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+                <span id="micBtnTxt">Start recording</span>
+              </button>
+              <select id="micLang" aria-label="Voice language">
+                <option value="en-IN" selected>English (India)</option>
+                <option value="ta-IN">Tamil (தமிழ்)</option>
+                <option value="hi-IN">Hindi (हिन्दी)</option>
+                <option value="kn-IN">Kannada (ಕನ್ನಡ)</option>
+                <option value="te-IN">Telugu (తెలుగు)</option>
+                <option value="ml-IN">Malayalam (മലയാളം)</option>
+                <option value="bn-IN">Bengali (বাংলা)</option>
+                <option value="mr-IN">Marathi (मराठी)</option>
+                <option value="gu-IN">Gujarati (ગુજરાતી)</option>
+                <option value="pa-IN">Punjabi (ਪੰਜਾਬੀ)</option>
+              </select>
+            </div>
+            <div class="mic-status" id="micStatus"></div>
+          </div>
+          <div class="field">
+            <label for="inVoice">Transcript</label>
+            <textarea id="inVoice" placeholder="Tap 'Start recording' and speak in Tamil, Hindi, or English — it appears live in your language's native script, or type/paste a transcript directly"></textarea>
+            <div class="hint">Location is resolved from whichever area name is spoken or typed, and the map will fly to it on submit.</div>
+          </div>
+        </div>
+
+        <div id="tab-photo" class="tabpane" hidden>
+          <div class="field">
+            <label>Upload photo of the issue</label>
+            <div class="file-drop" id="photoDrop">Click to upload — the AI detects the issue & location from the photo alone<span id="photoPreviewWrap"></span></div>
+            <input type="file" id="photoInput" accept="image/*" hidden>
+            <div class="hint" id="exifStatus"></div>
+          </div>
+          <div class="field">
+            <label for="inPhotoText">Anything to add in words? (optional)</label>
+            <input type="text" id="inPhotoText" placeholder="e.g. near Velachery bus depot">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Location</label>
+          <div class="locrow">
+            <input type="text" id="inLat" placeholder="lat (GPS share)" inputmode="decimal">
+            <input type="text" id="inLng" placeholder="lng (GPS share)" inputmode="decimal">
+            <button class="btn btn--ghost" id="gpsBtn" type="button" title="Use my location">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>
+            </button>
+          </div>
+          <div class="hint" id="locStatus">Location auto-detects when allowed — or type the area name below.</div>
+        </div>
+
+        <button class="btn full" id="submitBtn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 6"/></svg>
+          <span id="submitBtnTxt">Submit &amp; run AI intake</span>
+        </button>
+
+        <div class="stampbox" id="resultStamp">
+          <div class="row"><span>Category</span><b id="rCat">—</b></div>
+          <div class="row"><span>Severity</span><b id="rSev">—</b></div>
+          <div class="row"><span>Location resolved</span><b id="rLoc">—</b></div>
+          <div class="row"><span>Clean summary</span></div>
+          <div id="rDesc" style="margin-top:2px;color:#3a3527;line-height:1.5;"></div>
+          <div class="row" style="margin-top:8px;"><span>Photo metadata (EXIF)</span></div>
+          <div id="rPhotoMeta" style="margin-top:2px;color:#3a3527;font-family:var(--mono);font-size:.7rem;"></div>
+          <div class="row" style="margin-top:8px;"><span>Dedup result</span><b id="rDedup">—</b></div>
+        </div>
+
+        <div class="log">
+          <div class="log-head">
+            <h3>Live intake log</h3>
+            <span class="mono" style="font-size:.6rem;color:#6b6350" id="intakeCount"></span>
+          </div>
+          <div id="intakeLog"></div>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <!-- TRACK STATUS -->
+  <section id="statusView" class="view" data-od-id="status">
+    <article class="ticket">
+      <div class="ticket-head">
+        <div>
+          <h2 class="ticket-title">Track your complaint</h2>
+          <p class="ticket-sub">Enter the complaint ID you received when filing</p>
+        </div>
+        <span class="ticket-no">TKT</span>
+      </div>
+      <div class="ticket-body">
+        <div class="field">
+          <label for="trackId">Complaint ID</label>
+          <div class="locrow">
+            <input type="text" id="trackId" placeholder="e.g. 42">
+            <button class="btn" id="trackBtn" type="button">Go</button>
+          </div>
+          <div class="hint">Shown on the receipt after you file — a short number like #42.</div>
+        </div>
+        <div id="trackResult"></div>
+      </div>
+    </article>
+  </section>
+
+  <!-- ADMIN WARD CONTROL ROOM -->
+  <section id="adminView" class="view" data-od-id="admin">
+    <div class="kpis" data-od-id="kpis">
+      <div class="kpi kpi--red"><div class="num" id="kpiOpen">—</div><div class="lab">Open clusters</div></div>
+      <div class="kpi kpi--amber"><div class="num"><b id="kpiPeople">—</b></div><div class="lab">Citizens affected</div></div>
+      <div class="kpi kpi--green"><div class="num" id="kpiMerged">—</div><div class="lab">Reports auto-merged</div></div>
+      <div class="kpi kpi--canal"><div class="num" id="kpiSla">—</div><div class="lab">SLA breaches</div></div>
+    </div>
+
+    <div class="board-grid">
+      <div class="board">
+        <section class="panel" data-od-id="ops-board">
+          <div class="panel-head">
+            <div>
+              <h2>Operations <span class="tl">board</span></h2>
+              <div class="sub" id="cardCount">— clusters</div>
+            </div>
+            <div class="toolbar">
+              <button class="btn btn--amber" id="loadJudging" type="button">Load 15-complaint set</button>
+              <button class="btn btn--ghost btn--dark" id="runDedup" type="button" disabled>Run live dedup</button>
+              <button class="btn btn--ghost btn--dark" id="resetAll" type="button">Reset board</button>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="cards" id="cardsWrap"></div>
+          </div>
+        </section>
+
+        <section class="panel" data-od-id="formula-panel">
+          <div class="panel-head">
+            <div>
+              <h2>PRT <span class="tl">formula</span></h2>
+              <div class="sub">Regulation · R-7</div>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="formula-strip">
+              <div class="f">PRT = severity(1–5) × √(affected_citizens) × min(days_pending, 30) × proximity_multiplier</div>
+              <div class="note">
+                proximity_multiplier = <span class="hl">1.5</span> if any report in the cluster is within 200 m of a geocoded school/hospital, else 1.0.<br>
+                √(affected) dampens brigading — 10 duplicate reports gives ×3.16, not ×10. days_pending is capped at 30 so an old, forgotten complaint can't mathematically outrank an active emergency forever. Severity and location must still be independently corroborated by ≥ 1 report before the multiplier applies, so a single fake "near hospital" tag can't dominate the score on its own.
+              </div>
+              <div class="worked" id="workedExample">Worked example loads after you run the judging set below ↓</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" data-od-id="dedup-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Judging set · <span class="tl">live dedup</span></h2>
+              <div class="sub">Similarity · text / geo / vision</div>
+            </div>
+          </div>
+          <div class="panel-body" id="dedupExplain"></div>
+        </section>
+      </div>
+
+      <aside class="mapcol">
+        <section class="panel panel--map map-panel-glow" id="mapPanel" data-od-id="map-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Ward <span class="tl">map</span></h2>
+              <div class="sub">Chennai · zone 7</div>
+            </div>
+            <button class="btn btn--ghost btn--dark" id="mapFullscreenBtn" type="button" title="Toggle fullscreen map">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+              <span id="fsTxt">Fullscreen</span>
+            </button>
+          </div>
+          <div class="map-filters" id="mapFilters">
+            <select id="fCategory" aria-label="Filter category">
+              <option value="">All categories</option>
+              <option value="pothole">Pothole</option>
+              <option value="garbage">Garbage</option>
+              <option value="streetlight">Streetlight</option>
+              <option value="waterlogging">Waterlogging</option>
+            </select>
+            <select id="fStatus" aria-label="Filter status">
+              <option value="">All statuses</option>
+              <option value="open">Open</option>
+              <option value="in_progress">In progress</option>
+              <option value="resolved">Resolved</option>
+            </select>
+            <select id="fSort" aria-label="Sort">
+              <option value="priority">Sort: PRT ↓</option>
+              <option value="days">Sort: days pending ↓</option>
+              <option value="affected">Sort: affected ↓</option>
+              <option value="severity">Sort: severity ↓</option>
+            </select>
+            <input type="search" id="fSearch" placeholder="🔍 Search issues…" aria-label="Search issues" style="flex:1;min-width:140px">
+          </div>
+          <div class="map-panel-body">
+            <div id="map" aria-label="Ward map of open issues"></div>
+            <div class="map-legend" id="mapLegend">
+              <span class="legend-item"><span class="legend-dot" style="background:var(--cat-pothole)"></span>Pothole</span>
+              <span class="legend-item"><span class="legend-dot" style="background:var(--cat-garbage)"></span>Garbage</span>
+              <span class="legend-item"><span class="legend-dot" style="background:var(--cat-streetlight)"></span>Streetlight</span>
+              <span class="legend-item"><span class="legend-dot" style="background:var(--cat-waterlogging)"></span>Waterlogging</span>
+            </div>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </section>
+</main>
+
+<div class="toast-wrap" id="toastWrap" aria-live="polite"></div>
+
+<div class="modal-overlay" id="adminLoginOverlay" data-od-id="admin-login">
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="adminLoginTitle">
+    <h3 id="adminLoginTitle">Admin login</h3>
+    <div class="sub">Ward control room — authorized staff only</div>
+    <div class="field">
+      <label for="adminPasswordInput">Password</label>
+      <input type="password" id="adminPasswordInput" placeholder="••••••••">
+    </div>
+    <div class="modal-err" id="adminLoginErr"></div>
+    <div class="modal-actions">
+      <button class="btn btn--ghost" id="adminLoginCancel" type="button">Cancel</button>
+      <button class="btn" id="adminLoginSubmit" type="button">Login</button>
+    </div>
+    <div class="modal-hint">Demo build — staff password: <ADMIN_PASSWORD></div>
+  </div>
+</div>
+
+<script src="assets/js/leaflet.min.js"></script>
+<script src="assets/js/exif.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
